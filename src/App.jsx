@@ -156,37 +156,51 @@ function tallyRequest(body) {
   return `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME>${body}</REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 }
 
-// ── Local Agent URL ─────────────────────────────────────────────
-// The Bank2Tally Local Agent must be running on the user's PC.
-// Download from: bank2tall.vercel.app/agent  (or provided ZIP)
-const AGENT_URL = "http://localhost:27542";
+// ── Bank2Tally Universal Connector ──────────────────────────────
+// Uses Chrome Extension to bypass HTTPS→HTTP mixed content restriction
+// Extension communicates with Tally directly on localhost
 
-// Generic POST — routes through local agent to reach Tally
-async function tallyPost(host, port, xmlBody, timeoutMs = 8000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    // Always go through local agent (avoids HTTPS→HTTP mixed content block)
-    const res = await fetch(AGENT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/xml;charset=utf-8" },
-      body: xmlBody,
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Agent error: HTTP ${res.status}`);
-    }
-    return await res.text();
-  } catch (e) {
-    clearTimeout(timer);
-    if (e.name === "AbortError") throw new Error("Connection timed out. Is Tally open and agent running?");
-    if (e.message.includes("Failed to fetch") || e.message.includes("NetworkError")) {
-      throw new Error("Local agent not running. Please start START-AGENT.bat on your PC.");
-    }
-    throw e;
+// Check if extension is installed
+let _extensionReady = false;
+window.addEventListener("message", (e) => {
+  if (e.data?.type === "BANK2TALLY_EXTENSION_PRESENT") {
+    _extensionReady = true;
   }
+});
+
+// Send message to extension and wait for response
+function sendToExtension(msg, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const requestId = Math.random().toString(36).slice(2);
+    const responseType = msg.type + "_RESPONSE";
+    const timer = setTimeout(() => {
+      window.removeEventListener("message", handler);
+      reject(new Error("Extension response timed out"));
+    }, timeoutMs);
+
+    function handler(e) {
+      if (e.data?.type === responseType && e.data?.requestId === requestId) {
+        clearTimeout(timer);
+        window.removeEventListener("message", handler);
+        resolve(e.data);
+      }
+    }
+    window.addEventListener("message", handler);
+    window.postMessage({ ...msg, requestId }, "*");
+  });
+}
+
+// Generic POST to Tally via extension
+async function tallyPost(host, port, xmlBody, timeoutMs = 10000) {
+  if (!_extensionReady) {
+    throw new Error("Bank2Tally Connector extension not installed. Please install it from Settings.");
+  }
+  const res = await sendToExtension({
+    type: "TALLY_REQUEST",
+    host, port, body: xmlBody,
+  }, timeoutMs);
+  if (!res.success) throw new Error(res.error || "Tally request failed");
+  return res.data;
 }
 
 // Parse Tally XML response — extract text content of all matching tags
@@ -266,22 +280,14 @@ async function fetchTallyLedgers(host, port, companyName) {
   return all.length ? all : null; // null = use built-in fallback
 }
 
-// Test connection — first ping agent, then ping Tally through agent
+// Test connection via extension
 async function testTallyConnection(host, port) {
-  // Step 1: Check if local agent is running
-  try {
-    const ping = await fetch(`${AGENT_URL}/ping`, { method: "GET" });
-    if (!ping.ok) throw new Error("Agent not responding");
-  } catch (e) {
-    throw new Error("Local agent not running. Please start START-AGENT.bat on your PC first.");
+  if (!_extensionReady) {
+    throw new Error("Bank2Tally Connector extension not installed. Install it from Settings → Tally Gateway.");
   }
-  // Step 2: Try to reach Tally through agent
-  const xml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
-    <BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME></REQUESTDESC></EXPORTDATA></BODY>
-  </ENVELOPE>`;
-  const raw = await tallyPost(host, port, xml, 5000);
-  if (raw.includes("ENVELOPE") || raw.includes("COMPANY") || raw.includes("TALLY")) return true;
-  throw new Error("Unexpected response from Tally");
+  const res = await sendToExtension({ type: "TALLY_PING", host, port }, 6000);
+  if (res.success) return true;
+  throw new Error(res.error || "Cannot reach Tally");
 }
 
 // ── useTallyGateway hook ─────────────────────────────────────────
@@ -821,6 +827,65 @@ function ErrCard({ code, message, onDismiss }) {
 // ══════════════════════════════════════════════════════════════════
 // SCREEN: Login / Register / Pending Approval
 // ══════════════════════════════════════════════════════════════════
+
+// ── Extension Status Component ───────────────────────────────────
+function ExtensionStatus() {
+  const [status, setStatus] = useState("checking"); // checking | installed | missing
+  const T = THEME;
+
+  useEffect(() => {
+    // Check if extension sent presence signal
+    const timer = setTimeout(() => {
+      setStatus(window.__bank2tallyExtension ? "installed" : "missing");
+    }, 800);
+
+    const handler = (e) => {
+      if (e.data?.type === "BANK2TALLY_EXTENSION_PRESENT") {
+        window.__bank2tallyExtension = true;
+        setStatus("installed");
+        clearTimeout(timer);
+      }
+    };
+    window.addEventListener("message", handler);
+    window.postMessage({ type: "CHECK_EXTENSION" }, "*");
+    return () => { window.removeEventListener("message", handler); clearTimeout(timer); };
+  }, []);
+
+  if (status === "checking") return (
+    <div style={{ marginTop:14, background:T.surface, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.textDim }}>
+      ⏳ Checking for Bank2Tally Connector extension...
+    </div>
+  );
+
+  if (status === "installed") return (
+    <div style={{ marginTop:14, background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:8, padding:"10px 14px" }}>
+      <p style={{ fontSize:12, fontWeight:600, color:T.green }}>✓ Bank2Tally Connector Installed</p>
+      <p style={{ fontSize:11, color:T.textMid, marginTop:4 }}>Extension is active. Tally connection is ready.</p>
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop:14, background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"12px 14px" }}>
+      <p style={{ fontSize:12, fontWeight:700, color:T.red, marginBottom:6 }}>⚠ Extension Not Installed</p>
+      <p style={{ fontSize:11, color:T.textMid, lineHeight:1.7, marginBottom:10 }}>
+        Install the <strong style={{color:T.text}}>Bank2Tally Connector</strong> Chrome extension to connect to Tally. One-time setup, no software needed.
+      </p>
+      <div style={{ background:T.surface, borderRadius:7, padding:"8px 12px", fontSize:11, color:T.textMid, lineHeight:1.8, marginBottom:10 }}>
+        <strong style={{color:T.text}}>How to install:</strong><br/>
+        1. Download the extension ZIP below<br/>
+        2. Open Chrome → <code style={{color:T.accent}}>chrome://extensions</code><br/>
+        3. Enable <strong style={{color:T.text}}>Developer Mode</strong> (top right)<br/>
+        4. Click <strong style={{color:T.text}}>Load unpacked</strong> → select extracted folder<br/>
+        5. Refresh this page ✓
+      </div>
+      <a href="/tally-extension.zip" download
+        style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"8px 14px", background:T.accent, color:"#fff", borderRadius:7, fontSize:12, fontWeight:600, textDecoration:"none" }}>
+        ⬇ Download Extension
+      </a>
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin }) {
   const [tab, setTab] = useState("login"); // login | register | forgot
   // Login
@@ -2160,17 +2225,8 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
             </div>
           )}
           <p style={{ fontSize:11, color:T.textDim, marginTop:10 }}>Tally Prime → F12 &gt; Advanced Config → Enable Tally Gateway on port {tallyPort}</p>
-          <div style={{ marginTop:14, background:T.accentDim+"55", border:`1px solid ${T.accent}33`, borderRadius:8, padding:"10px 14px" }}>
-            <p style={{ fontSize:12, fontWeight:600, color:T.accent, marginBottom:6 }}>⚡ Local Agent Required</p>
-            <p style={{ fontSize:11, color:T.textMid, lineHeight:1.7 }}>
-              Download & run <strong style={{color:T.text}}>START-AGENT.bat</strong> on the same PC as Tally.<br/>
-              Keep it running in the background while using Bank2Tally.
-            </p>
-            <a href="https://bank2tall.vercel.app/agent.zip" download
-              style={{ display:"inline-block", marginTop:8, fontSize:11, color:T.accent, textDecoration:"underline" }}>
-              ⬇ Download Agent (ZIP)
-            </a>
-          </div>
+          {/* Extension status */}
+          <ExtensionStatus />
         </Card>
 
         {/* Defaults */}
