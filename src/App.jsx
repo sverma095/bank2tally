@@ -2049,9 +2049,10 @@ function PreviewScreen({ rows, filename, selectedCompanies, onBack, onImport, au
 // ══════════════════════════════════════════════════════════════════
 // SCREEN: History
 // ══════════════════════════════════════════════════════════════════
-function HistoryScreen({ history, onReimport, onBack }) {
-  const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState(null);
+function HistoryScreen({ history, onReimport, onDeleteEntry, onClearAll, onBack }) {
+  const [search,      setSearch]      = useState("");
+  const [expandedId,  setExpandedId]  = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const filtered = history.filter(h =>
     !search || h.filename?.toLowerCase().includes(search.toLowerCase()) || h.company?.toLowerCase().includes(search.toLowerCase())
@@ -2067,14 +2068,42 @@ function HistoryScreen({ history, onReimport, onBack }) {
     XLSX.writeFile(wb, `ReExport_${h.filename.replace(/\.[^.]+$/,"")}_${Date.now()}.xlsx`);
   };
 
+  // Days remaining helper
+  const daysLeft = (h) => {
+    if (!h.savedAt) return null;
+    const saved = new Date(h.savedAt).getTime();
+    const expiry = saved + 7 * 24 * 60 * 60 * 1000;
+    const left = Math.ceil((expiry - Date.now()) / (24 * 60 * 60 * 1000));
+    return Math.max(0, left);
+  };
+
   return (
     <div className="fade-in">
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div>
           <h2 style={{ fontSize:20, fontWeight:700, color:T.text, marginBottom:4 }}>Import History</h2>
-          <p style={{ color:T.textDim, fontSize:13 }}>{history.length} total imports · re-import or re-export any</p>
+          <p style={{ color:T.textDim, fontSize:13 }}>{history.length} import{history.length!==1?"s":""} · auto-deleted after 7 days</p>
         </div>
-        <Btn variant="secondary" onClick={onBack} icon="←">Back</Btn>
+        <div style={{ display:"flex", gap:8 }}>
+          {history.length > 0 && (
+            confirmClear ? (
+              <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                <span style={{ fontSize:12, color:T.textDim }}>Sure?</span>
+                <Btn size="sm" variant="danger" onClick={()=>{ onClearAll(); setConfirmClear(false); }} icon="🗑">Yes, clear all</Btn>
+                <Btn size="sm" variant="secondary" onClick={()=>setConfirmClear(false)}>Cancel</Btn>
+              </div>
+            ) : (
+              <Btn size="sm" variant="secondary" onClick={()=>setConfirmClear(true)} icon="🗑">Clear All</Btn>
+            )
+          )}
+          <Btn variant="secondary" onClick={onBack} icon="←">Back</Btn>
+        </div>
+      </div>
+
+      {/* 7-day info banner */}
+      <div style={{ background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:8, padding:"9px 14px", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ fontSize:14 }}>ℹ️</span>
+        <p style={{ fontSize:11, color:T.textMid }}>History is stored on this device only and <strong style={{color:T.text}}>auto-deleted after 7 days</strong> to save space. Download exports before they expire.</p>
       </div>
 
       <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by file name or company…" prefix="🔍" style={{ marginBottom:16, width:"100%" }} />
@@ -2088,9 +2117,9 @@ function HistoryScreen({ history, onReimport, onBack }) {
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {filtered.map(h => (
             <Card key={h.id} className="card-hover" style={{ padding:0, cursor:"pointer", transition:"border-color 0.2s" }}>
-              <div style={{ padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}
-                onClick={()=>setExpandedId(expandedId===h.id?null:h.id)}>
-                <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+              <div style={{ padding:"16px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:14, flex:1, cursor:"pointer" }}
+                  onClick={()=>setExpandedId(expandedId===h.id?null:h.id)}>
                   <div style={{ width:42, height:42, borderRadius:11, background:T.accentDim, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>
                     {h.filename?.endsWith(".pdf")?"📑":h.filename?.endsWith(".csv")?"📄":"📊"}
                   </div>
@@ -2099,6 +2128,11 @@ function HistoryScreen({ history, onReimport, onBack }) {
                     <div style={{ fontSize:11, color:T.textDim }}>{h.date} · {h.company}</div>
                     <div style={{ display:"flex", gap:6, marginTop:6, flexWrap:"wrap" }}>
                       <Pill color="blue" size="xs">{h.rows} rows</Pill>
+                      {(() => { const d = daysLeft(h); return d !== null ? (
+                        <Pill color={d<=1?"red":d<=3?"yellow":"green"} size="xs">
+                          {d===0?"expires today":`${d}d left`}
+                        </Pill>
+                      ) : null; })()}
                       {h.suspense>0 && <Pill color="amber" size="xs">{h.suspense} suspense</Pill>}
                       {h.duplicates>0 && <Pill color="red" size="xs">{h.duplicates} duplicates</Pill>}
                       <Pill color="green" size="xs" dot>Imported</Pill>
@@ -2108,7 +2142,8 @@ function HistoryScreen({ history, onReimport, onBack }) {
                 <div style={{ display:"flex", gap:8, flexShrink:0 }}>
                   <Btn size="sm" variant="secondary" onClick={e=>{e.stopPropagation();onReimport(h);}} icon="🔄">Re-import</Btn>
                   <Btn size="sm" variant="secondary" onClick={e=>{e.stopPropagation();exportFromHistory(h);}} icon="📊">Export</Btn>
-                  <span style={{ color:T.textDim, fontSize:18, padding:"4px 6px" }}>{expandedId===h.id?"▲":"▼"}</span>
+                  <Btn size="sm" variant="danger" onClick={e=>{e.stopPropagation();onDeleteEntry(h.id);}} icon="🗑">Delete</Btn>
+                  <span style={{ color:T.textDim, fontSize:18, padding:"4px 6px", cursor:"pointer" }}>{expandedId===h.id?"▲":"▼"}</span>
                 </div>
               </div>
               {expandedId===h.id && h.rows_data?.length>0 && (
@@ -2300,13 +2335,23 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [showApproval, setShowApproval] = useState(false);
 
-  // Load user-specific import history from Supabase
+  // Load user-specific import history — auto-purge entries older than 7 days
   const loadHistory = (userId) => {
     try {
       const key = `import_history_${userId}`;
       const stored = localStorage.getItem(key);
-      if (stored) setHistory(JSON.parse(stored));
-      else setHistory([]);
+      if (!stored) { setHistory([]); return; }
+      const parsed = JSON.parse(stored);
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days ago
+      const fresh  = parsed.filter(h => {
+        const ts = h.savedAt ? new Date(h.savedAt).getTime() : new Date(h.rawDate || 0).getTime();
+        return ts > cutoff;
+      });
+      // If some entries were purged, save the cleaned list
+      if (fresh.length !== parsed.length) {
+        localStorage.setItem(key, JSON.stringify(fresh));
+      }
+      setHistory(fresh);
     } catch { setHistory([]); }
   };
 
@@ -2315,6 +2360,23 @@ export default function App() {
     try {
       localStorage.setItem(`import_history_${userId}`, JSON.stringify(hist));
     } catch {}
+  };
+
+  // Delete a single history entry
+  const deleteHistoryEntry = (entryId) => {
+    setHistory(h => {
+      const updated = h.filter(x => x.id !== entryId);
+      if (user?.id) saveHistory(user.id, updated);
+      return updated;
+    });
+  };
+
+  // Clear all history for current user
+  const clearAllHistory = () => {
+    setHistory([]);
+    if (user?.id) {
+      localStorage.removeItem(`import_history_${user.id}`);
+    }
   };
 
   const onLogin = (u) => {
@@ -2414,7 +2476,7 @@ export default function App() {
       duplicates:rows.filter(r=>r.isDuplicate).length, rows_data:rows,
     };
     setHistory(h => {
-      const updated = [entry, ...h];
+      const updated = [{ ...entry, savedAt: new Date().toISOString() }, ...h];
       saveHistory(user.id, updated); // save per-user
       return updated;
     });
@@ -2531,7 +2593,7 @@ export default function App() {
           {screen === SCREENS.COLUMN_MAP && <ColumnMapScreen headers={headers} templateKey={templateKey} onMapped={onMapped} onBack={()=>setScreen(SCREENS.UPLOAD)} />}
           {screen === SCREENS.LEDGER && <LedgerScreen rows={rows} setRows={setRows} onNext={()=>setScreen(SCREENS.PREVIEW)} onBack={()=>setScreen(SCREENS.COLUMN_MAP)} auditLog={auditLog} setAuditLog={setAuditLog} user={user} tally={tally} />}
           {screen === SCREENS.PREVIEW && <PreviewScreen rows={rows} filename={filename} selectedCompanies={selectedCompanies} onBack={()=>setScreen(SCREENS.LEDGER)} onImport={onImport} auditLog={auditLog} tally={tally} />}
-          {screen === SCREENS.HISTORY && <HistoryScreen history={history} onReimport={onReimport} onBack={()=>setScreen(SCREENS.DASHBOARD)} />}
+          {screen === SCREENS.HISTORY && <HistoryScreen history={history} onReimport={onReimport} onDeleteEntry={deleteHistoryEntry} onClearAll={clearAllHistory} onBack={()=>setScreen(SCREENS.DASHBOARD)} />}
           {screen === SCREENS.SETTINGS && <SettingsScreen user={user} onLogout={onLogout} tally={tally} tallyHost={tallyHost} setTallyHost={setTallyHost} tallyPort={tallyPort} setTallyPort={setTallyPort} />}
         </div>
       </div>
