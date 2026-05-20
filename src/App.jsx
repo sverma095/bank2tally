@@ -2275,27 +2275,38 @@ export default function App() {
         localStorage.removeItem("sb_session"); return;
       }
       // Check token expiry
-      const payload = JSON.parse(atob(session.access_token.split(".")[1]));
+      let payload;
+      try { payload = JSON.parse(atob(session.access_token.split(".")[1])); } catch { payload = {}; }
       if (payload.exp && payload.exp * 1000 < Date.now()) {
         localStorage.removeItem("sb_session"); return;
       }
       sb._token = session.access_token;
+
+      // Helper: restore from session metadata alone (fallback)
+      const restoreFromSession = (profile) => {
+        const meta = session.user.user_metadata || {};
+        const name = profile?.name || meta.name || session.user.email.split("@")[0];
+        const role = profile?.role || meta.role || "user";
+        const status = profile?.status || (role === "admin" ? "approved" : "pending");
+        const avatar = profile?.avatar || name.slice(0,2).toUpperCase();
+        if (status !== "approved") { localStorage.removeItem("sb_session"); return; }
+        setUser({ id: session.user.id, name, role, status, avatar, company: profile?.company || "", email: session.user.email, sessionToken: session.access_token });
+        setScreen(SCREENS.DASHBOARD);
+        if (role === "admin") {
+          sb.from("approval_requests", "status=eq.pending&select=id")
+            .then(r => setPendingCount(r.length)).catch(() => {});
+        }
+      };
+
       sb.from("profiles", "id=eq." + session.user.id + "&select=*")
         .then(profiles => {
           const profile = profiles?.[0];
-          if (profile && profile.status === "approved") {
-            // Directly set state — avoids stale closure bug
-            setUser({ ...profile, email: session.user.email, sessionToken: session.access_token });
-            setScreen(SCREENS.DASHBOARD);
-            if (profile.role === "admin") {
-              sb.from("approval_requests", "status=eq.pending&select=id")
-                .then(r => setPendingCount(r.length)).catch(() => {});
-            }
-          } else {
-            localStorage.removeItem("sb_session");
-          }
+          restoreFromSession(profile || null);
         })
-        .catch(() => localStorage.removeItem("sb_session"));
+        .catch(() => {
+          // RLS or network error — still try to restore from session metadata
+          restoreFromSession(null);
+        });
     } catch (e) { localStorage.removeItem("sb_session"); }
   }, []); // eslint-disable-line
 
