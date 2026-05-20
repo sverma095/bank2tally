@@ -966,11 +966,34 @@ function LoginScreen({ onLogin }) {
     if (regPass !== regPass2)    return setErr("Passwords do not match.");
     setLoading(true);
     try {
-      await sb.signUp(regEmail, regPass, {
+      const session = await sb.signUp(regEmail, regPass, {
         name: regName.trim(),
         role: "user",
         company: regCompany.trim(),
       });
+      // Insert profile row with pending status
+      const userId = session.user?.id;
+      if (userId) {
+        try {
+          await sb.insert("profiles", {
+            id: userId,
+            name: regName.trim(),
+            role: "user",
+            company: regCompany.trim(),
+            status: "pending",
+            avatar: regName.trim().slice(0,2).toUpperCase(),
+          });
+          // Insert approval request so admin can see it
+          await sb.insert("approval_requests", {
+            user_id: userId,
+            status: "pending",
+            requested_at: new Date().toISOString(),
+          });
+        } catch (profileErr) {
+          // Profile insert may fail if email not verified yet (Supabase policy)
+          // The Supabase trigger / webhook should handle this on email confirmation
+        }
+      }
       setPendingReg({ name: regName.trim(), email: regEmail, company: regCompany.trim() });
       setVerifyStep(true);
     } catch (e) { setErr(e.message); }
@@ -1901,7 +1924,11 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
 
       <div style={{ display:"flex", justifyContent:"space-between", marginTop:20 }}>
         <Btn variant="secondary" onClick={onBack} icon="←">Back</Btn>
-        <Btn onClick={onNext} icon="→">Preview ({rows.filter(r=>!r.isDuplicate||forceImport[r.id]).length} rows)</Btn>
+        <Btn onClick={()=>{
+          // Sync forceImport state into row objects before proceeding
+          setRows(rs => rs.map(r => ({...r, forceImport: !!forceImport[r.id]})));
+          onNext();
+        }} icon="→">Preview ({rows.filter(r=>!r.isDuplicate||forceImport[r.id]).length} rows)</Btn>
       </div>
     </div>
   );
@@ -2185,7 +2212,7 @@ function HistoryScreen({ history, onReimport, onDeleteEntry, onClearAll, onBack 
                     <div style={{ display:"flex", gap:6, marginTop:6, flexWrap:"wrap" }}>
                       <Pill color="blue" size="xs">{h.rows} rows</Pill>
                       {(() => { const d = daysLeft(h); return d !== null ? (
-                        <Pill color={d<=1?"red":d<=3?"yellow":"green"} size="xs">
+                        <Pill color={d<=1?"red":d<=3?"amber":"green"} size="xs">
                           {d===0?"expires today":`${d}d left`}
                         </Pill>
                       ) : null; })()}
@@ -2236,9 +2263,7 @@ function HistoryScreen({ history, onReimport, onDeleteEntry, onClearAll, onBack 
 // ══════════════════════════════════════════════════════════════════
 // SCREEN: Settings
 // ══════════════════════════════════════════════════════════════════
-function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyPort, setTallyPort }) {
-  const [defaultLedger, setDefaultLedger] = useState("Suspense Account");
-  const [autoDetect, setAutoDetect] = useState(true);
+function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyPort, setTallyPort, defaultLedger, setDefaultLedger, autoDetectLedger, setAutoDetectLedger }) {
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null); // null | "ok" | "error"
@@ -2331,9 +2356,9 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
           </div>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0" }}>
             <span style={{ fontSize:13, color:T.text }}>AI auto-detect ledgers</span>
-            <div onClick={()=>setAutoDetect(!autoDetect)}
-              style={{ width:44, height:24, borderRadius:99, background:autoDetect?T.accent:T.border, cursor:"pointer", position:"relative", transition:"background 0.2s" }}>
-              <div style={{ position:"absolute", top:3, left:autoDetect?22:3, width:18, height:18, borderRadius:"50%", background:"#fff", transition:"left 0.2s" }} />
+            <div onClick={()=>setAutoDetectLedger(!autoDetectLedger)}
+              style={{ width:44, height:24, borderRadius:99, background:autoDetectLedger?T.accent:T.border, cursor:"pointer", position:"relative", transition:"background 0.2s" }}>
+              <div style={{ position:"absolute", top:3, left:autoDetectLedger?22:3, width:18, height:18, borderRadius:"50%", background:"#fff", transition:"left 0.2s" }} />
             </div>
           </div>
         </Card>
@@ -2816,6 +2841,8 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [tallyHost, setTallyHost] = useState("localhost");
   const [tallyPort, setTallyPort] = useState("9000");
+  const [defaultLedger, setDefaultLedger] = useState("Suspense Account");
+  const [autoDetectLedger, setAutoDetectLedger] = useState(true);
 
   // Live Tally gateway
   const tally = useTallyGateway(tallyHost, tallyPort);
@@ -2950,7 +2977,7 @@ export default function App() {
     const built = rawRows.map(r => {
       const get = field => m[field] ? r[headers.indexOf(m[field])] : "";
       const narr = String(get("narration")||"").trim();
-      const ai = aiLedger(narr);
+      const ai = autoDetectLedger ? aiLedger(narr) : defaultLedger;
       return { id:genId(), date:get("date"), narration:narr, debit:get("debit"), credit:get("credit"), balance:get("balance"), ref:get("ref"), aiLedger:ai, ledger:ai, isDuplicate:false };
     }).filter(r => r.date||r.debit||r.credit);
     setRows(detectDuplicates(built));
@@ -3075,7 +3102,7 @@ export default function App() {
           {screen === SCREENS.LEDGER && <LedgerScreen rows={rows} setRows={setRows} onNext={()=>setScreen(SCREENS.PREVIEW)} onBack={()=>setScreen(SCREENS.COLUMN_MAP)} auditLog={auditLog} setAuditLog={setAuditLog} user={user} tally={tally} />}
           {screen === SCREENS.PREVIEW && <PreviewScreen rows={rows} filename={filename} selectedCompanies={selectedCompanies} onBack={()=>setScreen(SCREENS.LEDGER)} onImport={onImport} auditLog={auditLog} tally={tally} />}
           {screen === SCREENS.HISTORY && <HistoryScreen history={history} onReimport={onReimport} onDeleteEntry={deleteHistoryEntry} onClearAll={clearAllHistory} onBack={()=>setScreen(SCREENS.DASHBOARD)} />}
-          {screen === SCREENS.SETTINGS && <SettingsScreen user={user} onLogout={onLogout} tally={tally} tallyHost={tallyHost} setTallyHost={setTallyHost} tallyPort={tallyPort} setTallyPort={setTallyPort} />}
+          {screen === SCREENS.SETTINGS && <SettingsScreen user={user} onLogout={onLogout} tally={tally} tallyHost={tallyHost} setTallyHost={setTallyHost} tallyPort={tallyPort} setTallyPort={setTallyPort} defaultLedger={defaultLedger} setDefaultLedger={setDefaultLedger} autoDetectLedger={autoDetectLedger} setAutoDetectLedger={setAutoDetectLedger} />}
           {screen === SCREENS.USER_MGMT && isAdmin && <UserManagementScreen adminUser={user} />}
         </div>
       </div>
