@@ -1136,17 +1136,17 @@ function AdminApprovalPanel({ user, onClose }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Join profiles + approval_requests
+      // Fetch approval requests only (no join — avoids RLS recursion)
       const rows = await sb.from(
         "approval_requests",
-        "status=eq.pending&select=*,profiles!approval_requests_user_id_fkey(name,company,created_at)&order=requested_at.asc"
+        "status=eq.pending&select=*&order=requested_at.asc"
       );
-      // Enrich each request with email from auth.users via a separate fetch
+      // Enrich each with profile data separately
       const enriched = await Promise.all(rows.map(async (req) => {
         try {
-          const users = await sb.from("profiles", `id=eq.${req.user_id}&select=id,name,company`);
-          return { ...req, profiles: { ...req.profiles, ...(users[0] || {}) } };
-        } catch { return req; }
+          const pr = await sb.from("profiles", `id=eq.${req.user_id}&select=name,company,avatar`);
+          return { ...req, profiles: pr?.[0] || {} };
+        } catch { return { ...req, profiles: {} }; }
       }));
       setRequests(enriched);
     } catch (e) { setToast_("Error: " + e.message); }
@@ -2431,13 +2431,17 @@ export default function App() {
             )}
           </nav>
           <div style={{ padding:"14px 14px", borderTop:`1px solid ${T.border}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
               <div style={{ width:32, height:32, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#fff" }}>{user.avatar}</div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
                 <div style={{ fontSize:10, color:T.textDim }}>{user.role}</div>
               </div>
             </div>
+            <button onClick={onLogout}
+              style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.red}44`, background:T.redDim, color:T.red, transition:"all 0.15s" }}>
+              <span>⏻</span> Sign Out
+            </button>
           </div>
         </div>
 
