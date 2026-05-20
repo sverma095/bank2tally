@@ -156,24 +156,35 @@ function tallyRequest(body) {
   return `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME>${body}</REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 }
 
-// Generic POST to Tally gateway
-async function tallyPost(host, port, xmlBody, timeoutMs = 5000) {
-  const url = `http://${host}:${port}`;
+// ── Local Agent URL ─────────────────────────────────────────────
+// The Bank2Tally Local Agent must be running on the user's PC.
+// Download from: bank2tall.vercel.app/agent  (or provided ZIP)
+const AGENT_URL = "http://localhost:27542";
+
+// Generic POST — routes through local agent to reach Tally
+async function tallyPost(host, port, xmlBody, timeoutMs = 8000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    // Always go through local agent (avoids HTTPS→HTTP mixed content block)
+    const res = await fetch(AGENT_URL, {
       method: "POST",
       headers: { "Content-Type": "text/xml;charset=utf-8" },
       body: xmlBody,
       signal: controller.signal,
     });
     clearTimeout(timer);
-    if (!res.ok) throw new Error(`Tally responded with HTTP ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Agent error: HTTP ${res.status}`);
+    }
     return await res.text();
   } catch (e) {
     clearTimeout(timer);
-    if (e.name === "AbortError") throw new Error("Connection timed out. Is Tally running?");
+    if (e.name === "AbortError") throw new Error("Connection timed out. Is Tally open and agent running?");
+    if (e.message.includes("Failed to fetch") || e.message.includes("NetworkError")) {
+      throw new Error("Local agent not running. Please start START-AGENT.bat on your PC.");
+    }
     throw e;
   }
 }
@@ -255,13 +266,20 @@ async function fetchTallyLedgers(host, port, companyName) {
   return all.length ? all : null; // null = use built-in fallback
 }
 
-// Test connection only (ping with company list request, short timeout)
+// Test connection — first ping agent, then ping Tally through agent
 async function testTallyConnection(host, port) {
+  // Step 1: Check if local agent is running
+  try {
+    const ping = await fetch(`${AGENT_URL}/ping`, { method: "GET" });
+    if (!ping.ok) throw new Error("Agent not responding");
+  } catch (e) {
+    throw new Error("Local agent not running. Please start START-AGENT.bat on your PC first.");
+  }
+  // Step 2: Try to reach Tally through agent
   const xml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
     <BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME></REQUESTDESC></EXPORTDATA></BODY>
   </ENVELOPE>`;
-  const raw = await tallyPost(host, port, xml, 3000);
-  // Any valid XML back = success
+  const raw = await tallyPost(host, port, xml, 5000);
   if (raw.includes("ENVELOPE") || raw.includes("COMPANY") || raw.includes("TALLY")) return true;
   throw new Error("Unexpected response from Tally");
 }
@@ -854,11 +872,9 @@ function LoginScreen({ onLogin }) {
 
   const upper2 = str => (str || "").slice(0,2).toUpperCase();
 
-  // ── OTP Verification state ───────────────────────────────────────
-  const [otpStep,    setOtpStep]    = useState(false); // show OTP entry
-  const [otpCode,    setOtpCode]    = useState("");
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [pendingReg, setPendingReg] = useState(null);  // holds reg data before OTP
+  // ── Email verification state ─────────────────────────────────────
+  const [verifyStep,  setVerifyStep]  = useState(false); // show "check email" screen
+  const [pendingReg,  setPendingReg]  = useState(null);  // holds reg data
 
   // ── Register ─────────────────────────────────────────────────────
   const handleRegister = async () => {
@@ -874,34 +890,14 @@ function LoginScreen({ onLogin }) {
         role: "user",
         company: regCompany.trim(),
       });
-      // Store reg data and show OTP step
       setPendingReg({ name: regName.trim(), email: regEmail, company: regCompany.trim() });
-      setOtpStep(true);
-      setSuccess(`Verification code sent to ${regEmail}`);
+      setVerifyStep(true);
     } catch (e) { setErr(e.message); }
     setLoading(false);
   };
 
-  // ── Verify OTP ────────────────────────────────────────────────────
-  const handleVerifyOtp = async () => {
-    setErr(""); setOtpLoading(true);
-    try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON },
-        body: JSON.stringify({ type: "signup", email: pendingReg.email, token: otpCode.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error_description || data.message || "Invalid or expired OTP.");
-      // OTP verified — show pending approval screen
-      setOtpStep(false);
-      setPendingUser({ name: pendingReg.name, email: pendingReg.email, status: "pending" });
-    } catch (e) { setErr(e.message); }
-    setOtpLoading(false);
-  };
-
-  // ── Resend OTP ────────────────────────────────────────────────────
-  const handleResendOtp = async () => {
+  // ── Resend verification email ─────────────────────────────────────
+  const handleResendVerification = async () => {
     setErr(""); setSuccess("");
     try {
       const res = await fetch(`${SUPABASE_URL}/auth/v1/resend`, {
@@ -909,8 +905,8 @@ function LoginScreen({ onLogin }) {
         headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON },
         body: JSON.stringify({ type: "signup", email: pendingReg.email }),
       });
-      if (res.ok) setSuccess("New OTP sent to your email.");
-      else throw new Error("Failed to resend OTP.");
+      if (res.ok) setSuccess("Verification email resent!");
+      else throw new Error("Failed to resend. Try again later.");
     } catch (e) { setErr(e.message); }
   };
 
@@ -1040,38 +1036,33 @@ function LoginScreen({ onLogin }) {
                 </>
               )}
             </>
-          ) : otpStep ? (
+          ) : verifyStep ? (
             <>
-              <div style={{ textAlign:"center", marginBottom:20 }}>
-                <div style={{ fontSize:40, marginBottom:10 }}>📧</div>
-                <h3 style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:6 }}>Verify your email</h3>
-                <p style={{ fontSize:12, color:T.textDim, lineHeight:1.6 }}>
-                  We sent a 6-digit code to<br/>
-                  <strong style={{color:T.accent}}>{pendingReg?.email}</strong>
+              <div style={{ textAlign:"center", padding:"10px 0 20px" }}>
+                <div style={{ fontSize:52, marginBottom:12 }}>📬</div>
+                <h3 style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:8 }}>Check your email</h3>
+                <p style={{ fontSize:13, color:T.textMid, lineHeight:1.7, marginBottom:4 }}>
+                  We sent a verification link to:
                 </p>
-              </div>
-              <div style={{ marginBottom:18 }}>
-                <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>Enter verification code</label>
-                <input
-                  value={otpCode}
-                  onChange={e => setOtpCode(e.target.value.replace(/\D/g,"").slice(0,6))}
-                  placeholder="• • • • • •"
-                  maxLength={6}
-                  style={{ width:"100%", background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:"14px 18px", fontSize:28, color:T.text, fontFamily:T.mono, letterSpacing:12, textAlign:"center", outline:"none" }}
-                />
-              </div>
-              <Btn onClick={handleVerifyOtp} disabled={otpLoading || otpCode.length < 6} fullWidth size="lg" icon={otpLoading ? "⏳" : "✓"}>
-                {otpLoading ? "Verifying…" : "Verify & Continue"}
-              </Btn>
-              <div style={{ marginTop:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <button onClick={()=>{setOtpStep(false);setOtpCode("");setErr("");setSuccess("");}}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:T.textDim, fontSize:12, fontFamily:T.font }}>
-                  ← Back
-                </button>
-                <button onClick={handleResendOtp}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:T.accent, fontSize:12, fontFamily:T.font, textDecoration:"underline" }}>
-                  Resend code
-                </button>
+                <p style={{ fontSize:14, fontWeight:700, color:T.accent, marginBottom:16 }}>
+                  {pendingReg?.email}
+                </p>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:"14px 16px", textAlign:"left", marginBottom:20 }}>
+                  <p style={{ fontSize:12, color:T.textMid, lineHeight:1.8 }}>
+                    1. Open your email inbox<br/>
+                    2. Click the <strong style={{color:T.text}}>verification link</strong> from Bank2Tally<br/>
+                    3. Come back here and <strong style={{color:T.text}}>Sign In</strong>
+                  </p>
+                </div>
+                <Btn onClick={handleResendVerification} variant="secondary" fullWidth icon="📨">
+                  Resend verification email
+                </Btn>
+                <div style={{ marginTop:14 }}>
+                  <button onClick={()=>{setVerifyStep(false);setTab("login");setErr("");setSuccess("");}}
+                    style={{ background:"none", border:"none", cursor:"pointer", color:T.textDim, fontSize:12, fontFamily:T.font }}>
+                    ← Back to Sign In
+                  </button>
+                </div>
               </div>
             </>
           ) : tab === "login" ? (
@@ -2169,6 +2160,17 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
             </div>
           )}
           <p style={{ fontSize:11, color:T.textDim, marginTop:10 }}>Tally Prime → F12 &gt; Advanced Config → Enable Tally Gateway on port {tallyPort}</p>
+          <div style={{ marginTop:14, background:T.accentDim+"55", border:`1px solid ${T.accent}33`, borderRadius:8, padding:"10px 14px" }}>
+            <p style={{ fontSize:12, fontWeight:600, color:T.accent, marginBottom:6 }}>⚡ Local Agent Required</p>
+            <p style={{ fontSize:11, color:T.textMid, lineHeight:1.7 }}>
+              Download & run <strong style={{color:T.text}}>START-AGENT.bat</strong> on the same PC as Tally.<br/>
+              Keep it running in the background while using Bank2Tally.
+            </p>
+            <a href="https://bank2tall.vercel.app/agent.zip" download
+              style={{ display:"inline-block", marginTop:8, fontSize:11, color:T.accent, textDecoration:"underline" }}>
+              ⬇ Download Agent (ZIP)
+            </a>
+          </div>
         </Card>
 
         {/* Defaults */}
