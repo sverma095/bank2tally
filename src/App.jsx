@@ -2212,12 +2212,7 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
 // ══════════════════════════════════════════════════════════════════
 // ROOT APP
 // ══════════════════════════════════════════════════════════════════
-const INITIAL_HISTORY = [
-  { id:"h1", filename:"HDFC_Mar2025.xlsx", date:"15 Mar 2025", rawDate:"2025-03-15", rows:142, company:"Acme Corp Pvt Ltd", status:"Imported", suspense:8, duplicates:3, rows_data:[] },
-  { id:"h2", filename:"ICICI_Feb2025.csv", date:"02 Feb 2025", rawDate:"2025-02-02", rows:89, company:"Sunrise Traders", status:"Imported", suspense:4, duplicates:0, rows_data:[] },
-  { id:"h3", filename:"SBI_Jan2025.xlsx", date:"31 Jan 2025", rawDate:"2025-01-31", rows:204, company:"Acme Corp Pvt Ltd", status:"Imported", suspense:21, duplicates:6, rows_data:[] },
-  { id:"h4", filename:"Axis_Dec2024.xlsx", date:"31 Dec 2024", rawDate:"2024-12-31", rows:67, company:"Horizon Enterprises", status:"Imported", suspense:2, duplicates:1, rows_data:[] },
-];
+const INITIAL_HISTORY = []; // No demo data — each user sees only their own imports
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -2229,7 +2224,7 @@ export default function App() {
   const [mapping, setMapping] = useState({});
   const [rows, setRows] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState([]);
-  const [history, setHistory] = useState(INITIAL_HISTORY);
+  const [history, setHistory] = useState(INITIAL_HISTORY); // always starts empty
   const [auditLog, setAuditLog] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [tallyHost, setTallyHost] = useState("localhost");
@@ -2247,9 +2242,27 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [showApproval, setShowApproval] = useState(false);
 
+  // Load user-specific import history from Supabase
+  const loadHistory = (userId) => {
+    try {
+      const key = `import_history_${userId}`;
+      const stored = localStorage.getItem(key);
+      if (stored) setHistory(JSON.parse(stored));
+      else setHistory([]);
+    } catch { setHistory([]); }
+  };
+
+  // Save import history to localStorage scoped by user
+  const saveHistory = (userId, hist) => {
+    try {
+      localStorage.setItem(`import_history_${userId}`, JSON.stringify(hist));
+    } catch {}
+  };
+
   const onLogin = (u) => {
     setUser(u);
     setScreen(SCREENS.DASHBOARD);
+    loadHistory(u.id); // load ONLY this user's history
     if (u.role === "admin") {
       sb.from("approval_requests", "status=eq.pending&select=id")
         .then(rows => setPendingCount(rows.length))
@@ -2263,6 +2276,8 @@ export default function App() {
     setUser(null);
     setScreen(SCREENS.LOGIN);
     setPendingCount(0);
+    setHistory([]); // clear history so next user can't see previous user's data
+    setRows([]); setHeaders([]); setRawRows([]); setFilename("");
   };
 
   // Restore session on mount — runs once, directly sets user state
@@ -2340,7 +2355,11 @@ export default function App() {
       suspense:validRows.filter(r=>r.ledger==="Suspense Account").length,
       duplicates:rows.filter(r=>r.isDuplicate).length, rows_data:rows,
     };
-    setHistory(h=>[entry,...h]);
+    setHistory(h => {
+      const updated = [entry, ...h];
+      saveHistory(user.id, updated); // save per-user
+      return updated;
+    });
     toast(`✓ ${validRows.length} vouchers pushed to Tally for ${companies}`,"success");
     setScreen(SCREENS.DASHBOARD);
     setHeaders([]); setRawRows([]); setRows([]); setFilename(""); setAuditLog([]);
