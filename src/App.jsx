@@ -115,28 +115,45 @@ const sb = {
 
 // ── Design Tokens ────────────────────────────────────────────────
 const T = {
-  bg: "#0f1117",
-  surface: "#16181f",
-  card: "#1c1f2a",
-  border: "#2a2d3a",
-  borderLight: "#343748",
-  accent: "#4f8ef7",
-  accentDim: "#1e3a6e",
-  accentGlow: "rgba(79,142,247,0.15)",
-  green: "#22c55e",
-  greenDim: "#14532d",
-  amber: "#f59e0b",
-  amberDim: "#451a03",
-  red: "#ef4444",
-  redDim: "#450a0a",
-  purple: "#a78bfa",
-  purpleDim: "#2e1065",
-  text: "#e2e8f0",
-  textMid: "#94a3b8",
-  textDim: "#475569",
-  font: "'DM Sans', 'Segoe UI', sans-serif",
-  mono: "'JetBrains Mono', 'Fira Code', monospace",
+  bg:          "#080b12",
+  surface:     "#0e1220",
+  card:        "#131825",
+  border:      "#1e2640",
+  borderLight: "#263050",
+  accent:      "#3d7fff",
+  accentDim:   "#0d1f4a",
+  accentGlow:  "rgba(61,127,255,0.18)",
+  accentSoft:  "rgba(61,127,255,0.08)",
+  green:       "#10d98c",
+  greenDim:    "#052e1e",
+  amber:       "#ffb547",
+  amberDim:    "#3d2200",
+  red:         "#ff4f6a",
+  redDim:      "#3d0a14",
+  purple:      "#b47cff",
+  purpleDim:   "#1e0a40",
+  gold:        "#ffd166",
+  goldDim:     "#3d2800",
+  text:        "#eef2ff",
+  textMid:     "#8896b3",
+  textDim:     "#3d4f6e",
+  font:        "'DM Sans', 'Segoe UI', sans-serif",
+  mono:        "'JetBrains Mono', 'Fira Code', monospace",
 };
+
+// ── Motivational Quotes ──────────────────────────────────────────
+const QUOTES = [
+  { text: "Accounting is the language of business. Speak it fluently.", author: "Warren Buffett (adapted)" },
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "Beware of little expenses. A small leak will sink a great ship.", author: "Benjamin Franklin" },
+  { text: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
+  { text: "It's not about having time. It's about making time.", author: "Unknown" },
+  { text: "Do not save what is left after spending; spend what is left after saving.", author: "Warren Buffett" },
+  { text: "Success is the sum of small efforts repeated day in and day out.", author: "Robert Collier" },
+  { text: "Financial freedom is available to those who learn about it and work for it.", author: "Robert Kiyosaki" },
+];
+
+const todayQuote = QUOTES[new Date().getDate() % QUOTES.length];
 
 // ── Constants ────────────────────────────────────────────────────
 // No hardcoded companies — all fetched live from Tally gateway
@@ -1035,10 +1052,17 @@ function LoginScreen({ onLogin }) {
       <div style={{ position:"absolute", inset:0, backgroundImage:BG, pointerEvents:"none" }} />
       <div className="fade-in" style={{ width:440, position:"relative" }}>
         {/* Logo */}
-        <div style={{ textAlign:"center", marginBottom:28 }}>
-          <div style={{ width:64, height:64, borderRadius:18, background:`linear-gradient(135deg, ${T.accent}, #3b6fd4)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto 14px", boxShadow:`0 0 40px ${T.accentGlow}` }}>🏦</div>
-          <h1 style={{ fontSize:26, fontWeight:800, color:T.text, letterSpacing:"-0.5px", marginBottom:4 }}>Bank2Tally</h1>
-          <p style={{ color:T.textDim, fontSize:13 }}>Professional Bank Statement Importer</p>
+        {/* ── Brand Header ── */}
+        <div style={{ textAlign:"center", marginBottom:24 }}>
+          <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
+            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1a4fd6, #3d7fff, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, boxShadow:"0 0 0 1px rgba(61,127,255,0.3), 0 0 60px rgba(61,127,255,0.25), 0 8px 32px rgba(0,0,0,0.5)" }}>🏦</div>
+          </div>
+          <h1 style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px", marginBottom:3, background:"linear-gradient(135deg, #eef2ff 40%, #3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</h1>
+          <p style={{ color:T.textMid, fontSize:11, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>Professional Bank Statement Importer</p>
+          <div style={{ background:`linear-gradient(135deg, rgba(61,127,255,0.08), rgba(180,124,255,0.08))`, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 14px", textAlign:"left" }}>
+            <p style={{ fontSize:12, color:T.textMid, lineHeight:1.65, fontStyle:"italic", marginBottom:4 }}>"{todayQuote.text}"</p>
+            <p style={{ fontSize:10, color:T.textDim, fontWeight:600, letterSpacing:"0.05em" }}>— {todayQuote.author}</p>
+          </div>
         </div>
 
         {/* Tab switcher - only show when not on forgot */}
@@ -1175,6 +1199,28 @@ function LoginScreen({ onLogin }) {
             </>
           )}
         </Card>
+
+        {/* ── Verma Consultancy Branding Footer ── */}
+        <div style={{ textAlign:"center", marginTop:22, paddingTop:16, borderTop:`1px solid ${T.border}` }}>
+          <div style={{ display:"inline-flex", alignItems:"center", gap:6, marginBottom:8 }}>
+            <span style={{ color:T.gold, fontSize:14 }}>✦</span>
+            <span style={{ fontSize:12, fontWeight:700, color:T.textMid, letterSpacing:"0.03em" }}>Produced by</span>
+            <span style={{ fontSize:12, fontWeight:800, color:T.text, letterSpacing:"0.02em" }}>Verma Consultancy Services</span>
+            <span style={{ color:T.gold, fontSize:14 }}>✦</span>
+          </div>
+          <p style={{ fontSize:11, color:T.textDim, marginBottom:8 }}>For purchase, support &amp; enquiries</p>
+          <div style={{ display:"flex", justifyContent:"center", gap:16, flexWrap:"wrap" }}>
+            <a href="tel:+918707401846"
+              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px", background:T.accentSoft, border:`1px solid ${T.accent}44`, borderRadius:20, fontSize:11, fontWeight:600, color:T.accent, textDecoration:"none" }}>
+              📞 8707401846
+            </a>
+            <a href="mailto:svtiger543939@gmail.com"
+              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px", background:T.accentSoft, border:`1px solid ${T.accent}44`, borderRadius:20, fontSize:11, fontWeight:600, color:T.accent, textDecoration:"none" }}>
+              ✉ svtiger543939@gmail.com
+            </a>
+          </div>
+          <p style={{ fontSize:10, color:T.textDim, marginTop:10, letterSpacing:"0.04em" }}>v2.0 Commercial · Tally ERP 9 &amp; Prime Compatible</p>
+        </div>
       </div>
     </div>
   );
@@ -1303,14 +1349,25 @@ function DashboardScreen({ history, setScreen, user, tally }) {
     <div className="fade-in">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
-          <h2 style={{ fontSize:22, fontWeight:700, color:T.text, letterSpacing:"-0.4px" }}>Dashboard</h2>
-          <p style={{ color:T.textDim, fontSize:13, marginTop:3 }}>Welcome back, {user?.name?.split(" ")[0]} 👋</p>
+          <div>
+            <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.6px", background:"linear-gradient(135deg, #eef2ff 50%, #3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Dashboard</h2>
+            <p style={{ color:T.textMid, fontSize:13, marginTop:3 }}>Welcome back, <strong style={{color:T.text}}>{user?.name?.split(" ")[0]}</strong> 👋</p>
+          </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {tally?.status === "ok" && <Pill color="green" dot>Tally Live · {tally.companies.length} co.</Pill>}
           {tally?.status === "connecting" && <Pill color="amber" dot>Tally…</Pill>}
           {tally?.status === "error" && <Pill color="red" dot>Tally Offline</Pill>}
           <Btn onClick={() => setScreen(SCREENS.UPLOAD)} icon="+" size="lg">New Import</Btn>
+        </div>
+      </div>
+
+      {/* Daily Motivation */}
+      <div style={{ background:"linear-gradient(135deg, rgba(61,127,255,0.07), rgba(180,124,255,0.07))", border:"1px solid rgba(61,127,255,0.18)", borderRadius:14, padding:"12px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:14 }}>
+        <div style={{ fontSize:26, flexShrink:0 }}>💡</div>
+        <div>
+          <p style={{ fontSize:12, color:T.textMid, lineHeight:1.6, fontStyle:"italic", marginBottom:2 }}>"{todayQuote.text}"</p>
+          <p style={{ fontSize:10, color:T.textDim, fontWeight:600 }}>— {todayQuote.author}</p>
         </div>
       </div>
 
@@ -2286,12 +2343,19 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
         <Card>
           <p style={{ fontWeight:600, fontSize:14, marginBottom:16, color:T.text }}>About</p>
           <div style={{ display:"flex", flexDirection:"column", gap:10, fontSize:12, color:T.textDim }}>
-            {[["Version","2.0.0 (Commercial)"],["License","Professional — Unlimited companies"],["Support","support@bank2tally.in"],["Tally Compat.","Tally Prime 3.x, ERP 9 (6.6+)"],["GST","Compliant with CGST/SGST/IGST"]].map(([k,v])=>(
+            {[["Version","2.0.0 (Commercial)"],["License","Professional — Unlimited companies"],["Support","support@bank2tally.in"],["Tally Compat.","Tally Prime 3.x, ERP 9 (6.6+)"],["GST","Compliant with CGST/SGST/IGST"],["Produced by","Verma Consultancy Services"]].map(([k,v])=>(
               <div key={k} style={{ display:"flex", justifyContent:"space-between" }}>
                 <span>{k}</span>
-                <span style={{ color:T.text, fontWeight:500 }}>{v}</span>
+                <span style={{ color:k==="Produced by"?T.gold:T.text, fontWeight:k==="Produced by"?700:500 }}>{v}</span>
               </div>
             ))}
+            <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${T.border}` }}>
+              <p style={{ color:T.textDim, marginBottom:8, fontSize:11 }}>For purchase &amp; support:</p>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                <a href="tel:+918707401846" style={{ color:T.accent, textDecoration:"none", fontWeight:600, fontSize:12 }}>📞 8707401846</a>
+                <a href="mailto:svtiger543939@gmail.com" style={{ color:T.accent, textDecoration:"none", fontWeight:600, fontSize:12 }}>✉ svtiger543939@gmail.com</a>
+              </div>
+            </div>
           </div>
         </Card>
       </div>
@@ -2535,12 +2599,15 @@ export default function App() {
         {/* Sidebar */}
         <div style={{ width:220, background:T.surface, borderRight:`1px solid ${T.border}`, padding:"20px 0", display:"flex", flexDirection:"column", flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100 }}>
           <div style={{ padding:"0 20px 20px", borderBottom:`1px solid ${T.border}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:9, background:`linear-gradient(135deg,${T.accent},#3b6fd4)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:`0 0 20px ${T.accentGlow}` }}>🏦</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+              <div style={{ width:38, height:38, borderRadius:11, background:"linear-gradient(145deg,#1a4fd6,#3d7fff,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, boxShadow:"0 0 24px rgba(61,127,255,0.3)" }}>🏦</div>
               <div>
-                <div style={{ fontWeight:800, fontSize:15, color:T.text, letterSpacing:"-0.4px" }}>Bank2Tally</div>
-                <div style={{ fontSize:10, color:T.textDim }}>v2.0 Commercial</div>
+                <div style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#eef2ff,#3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</div>
+                <div style={{ fontSize:9, color:T.textDim, letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600 }}>by Verma Consultancy</div>
               </div>
+            </div>
+            <div style={{ background:"rgba(61,127,255,0.06)", borderLeft:`2px solid ${T.accent}44`, borderRadius:"0 6px 6px 0", padding:"6px 10px" }}>
+              <p style={{ fontSize:10, color:T.textMid, lineHeight:1.5, fontStyle:"italic" }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
             </div>
           </div>
           <nav style={{ flex:1, padding:"14px 10px" }}>
