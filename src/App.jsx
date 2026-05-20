@@ -848,7 +848,6 @@ function ErrCard({ code, message, onDismiss }) {
 // ── Extension Status Component ───────────────────────────────────
 function ExtensionStatus() {
   const [status, setStatus] = useState("checking"); // checking | installed | missing
-  const T = THEME;
 
   useEffect(() => {
     // Check if extension sent presence signal
