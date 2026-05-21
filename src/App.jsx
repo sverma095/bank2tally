@@ -254,36 +254,66 @@ function parseTallyTags(xml, tag) {
   return results;
 }
 
-// Fetch all companies from Tally — tries multiple XML formats for Tally Prime / ERP9
+// Fetch all companies from Tally — tries every known request format
 async function fetchTallyCompanies(host, port) {
-  // Format 1: Tally Prime standard
-  const xml1 = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
-  // Format 2: Tally ERP 9 / older Prime
-  const xml2 = `<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Data</TYPE><ID>List of Companies</ID></HEADER><BODY><DESC><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></DESC></BODY></ENVELOPE>`;
+  // These are the correct XML formats Tally Prime actually responds to:
 
-  let raw = "";
-  try { raw = await tallyPost(host, port, xml1); }
-  catch(e) {
-    if (e.message === "EXTENSION_NOT_READY") throw e;
-    try { raw = await tallyPost(host, port, xml2); } catch(e2) { throw e; }
+  // Format A: Get currently OPEN company via SVCURRENTCOMPANY system variable
+  const xmlA = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Company Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+
+  // Format B: Get company name via Collection of companies
+  const xmlB = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES><REPORTNAME>Day Book</REPORTNAME></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+
+  // Format C: Direct collection request — the most reliable for Tally Prime 3.x
+  const xmlC = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Primary Groups</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+
+  // Format D: TDL-style collection export (works on all Tally Gateway versions)
+  const xmlD = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>COMPANY</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+
+  // Format E: Fetch via GETCOLLECTION — works on Tally Prime 2.x+
+  const xmlE = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT><SVCURRENTCOMPANY></SVCURRENTCOMPANY></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+
+  const formats = [xmlA, xmlE, xmlC, xmlD, xmlB];
+  let lastRaw = "";
+
+  for (const xml of formats) {
+    try {
+      const raw = await tallyPost(host, port, xml, 8000);
+      lastRaw = raw;
+      if (raw.includes("LINEERROR")) continue; // try next format
+
+      // Try all known company/name tags
+      const candidates = [
+        ...parseTallyTags(raw, "COMPANY"),
+        ...parseTallyTags(raw, "BASICCOMPANYNAME"),
+        ...parseTallyTags(raw, "COMPANYNAME"),
+        ...parseTallyTags(raw, "NAME"),
+        ...parseTallyTags(raw, "REMOTECMPINFO\.LIST"),
+      ].map(n => n.trim()).filter(n => n && !n.includes("<") && n.length > 1 && n.length < 100);
+
+      const unique = [...new Set(candidates)];
+      if (unique.length > 0) {
+        console.info("Tally companies found:", unique);
+        return unique.map((name, i) => ({ id: `tc${i}`, name, gstin: "", state: "", fy: "2024-25" }));
+      }
+
+      // If we got a valid XML response but no company tags,
+      // the company name may be in COMPANYINFO or header — try extracting it
+      const headerMatch = raw.match(/<SVCURRENTCOMPANY[^>]*>([^<]+)<\/SVCURRENTCOMPANY>/i);
+      if (headerMatch?.[1]?.trim()) {
+        const name = headerMatch[1].trim();
+        console.info("Tally company from header:", name);
+        return [{ id: "tc0", name, gstin: "", state: "", fy: "2024-25" }];
+      }
+    } catch(e) {
+      if (e.message === "EXTENSION_NOT_READY") throw e;
+      lastRaw = e.message;
+    }
   }
 
-  // Try all known company tag names across Tally versions
-  const tags = ["COMPANY", "BASICCOMPANYNAME", "REMOTECMPINFO.LIST", "CMPINFO.LIST"];
-  let names = [];
-  for (const tag of tags) {
-    const found = parseTallyTags(raw, tag).filter(n => n && !n.includes("<") && n.trim().length > 0);
-    names.push(...found);
-  }
-  // Also try extracting from NAME tags inside COMPANY elements
-  const allNames = [...new Set(names)].filter(Boolean);
-
-  if (!allNames.length) {
-    // Log raw response for debugging
-    console.warn("Tally company fetch — raw response:", raw?.slice(0, 500));
-    throw new Error("Tally is connected but returned no companies. Make sure at least one company is open in Tally Prime.");
-  }
-  return allNames.map((name, i) => ({ id: `tc${i}`, name, gstin: "", state: "", fy: "2024-25" }));
+  // Last resort — if Tally responded at all, ask user to enter company manually
+  console.warn("Tally company fetch — all formats exhausted. Last raw:", lastRaw?.slice(0, 300));
+  throw new Error("Tally is connected but could not read company list. Please enter your company name manually below.");
 }
 
 // Fetch company details (GSTIN, state, FY) for a specific company
@@ -421,7 +451,7 @@ function useTallyGateway(host = "localhost", port = "9000") {
   // Re-fetch when host/port change (call manually or via refetch)
   const refetch = useCallback((h, p) => fetch_(h || host, p || port), [fetch_, host, port]);
 
-  return { status, companies, ledgerMap, error, lastFetch, refetch };
+  return { status, companies, ledgerMap, error, lastFetch, refetch }; // error is exposed for UI use
 }
 
 const BANK_TEMPLATES = {
@@ -1577,7 +1607,9 @@ function UploadScreen({ onParsed, selectedCompanies, setSelectedCompanies, tally
 
         {tally.status === "error" && (
           <div style={{ background:T.amberDim, border:`1px solid ${T.amber}44`, borderRadius:8, padding:"9px 14px", fontSize:12, color:T.amber, marginBottom:12 }}>
-            ⚠ Could not reach Tally at {tally.status === "error" ? "localhost:9000" : ""}. Go to <strong>Settings → Test Connection</strong> to reconnect, or type a company name below.
+            ⚠ {tally.error?.includes("manually") 
+              ? "Tally is connected but company list could not be read automatically. Type your company name below."
+              : `Could not reach Tally at localhost:9000. Go to Settings → Test Connection to reconnect, or type a company name below.`}
           </div>
         )}
 
