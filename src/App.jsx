@@ -473,6 +473,7 @@ function useTallyGateway(host = "localhost", port = "9000") {
 const BANK_TEMPLATES = {
   hdfc:     { name: "HDFC Bank",          cols: { date: "Date", narration: "Narration", debit: "Withdrawal Amt.", credit: "Deposit Amt.", balance: "Closing Balance", ref: "Chq./Ref.No." }},
   sbi:      { name: "SBI",                cols: { date: "Txn Date", narration: "Description", debit: "Debit", credit: "Credit", balance: "Balance", ref: "Ref No./Cheque No." }},
+  sbi2:     { name: "SBI (PDF)",           cols: { date: "Txn Date", narration: "Description", debit: "Debit", credit: "Credit", balance: "Balance", ref: "Ref No./Cheque No." }},
   icici:    { name: "ICICI Bank (CSV)",   cols: { date: "Transaction Date", narration: "Transaction Remarks", debit: "Withdrawal Amount (INR )", credit: "Deposit Amount (INR )", balance: "Balance (INR )", ref: "S No." }},
   icici_ca: { name: "ICICI Bank (PDF)",   cols: { date: "Value Date", narration: "Description", crdr: "Transaction Amount(INR)", crdrFlag: "Cr/Dr", balance: "Available Balance(INR)", ref: "Transaction ID" }},
   axis:     { name: "Axis Bank",          cols: { date: "Tran Date", narration: "PARTICULARS", debit: "DR", credit: "CR", balance: "BAL", ref: "CHQNO" }},
@@ -722,94 +723,139 @@ async function ocrPdfText(buf, onProgress) {
 }
 
 // ── Universal text-table parser ──────────────────────────────────────────
-// Converts raw text (from PDF/OCR) into { headers, rows }
-// Strategy: detect header row → detect separator → split data rows → auto-merge wrapped rows
+// Handles any bank PDF: SBI, ICICI, HDFC, Axis, etc.
+// Works with 1-line and 2-line headers, wrapped description rows, any column count
 function parsePdfText(rawText) {
-  const DATE_RE  = /\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/;
-  const AMT_RE   = /\b\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?\b/;
-  const HDR_RE   = /date|narr|desc|particular|debit|credit|withdraw|deposit|balance|amount|dr|cr/i;
-  const SKIP_RE  = /^(page\s*\d|total|opening|closing|grand|brought forward|carried forward|statement|account|branch|ifsc|dear|customer|transaction\s*period)/i;
+  const DATE_RE = /\b(\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2,4})\b/i;
+  const AMT_RE  = /\b\d{1,3}(?:,\d{2,3})*\.\d{2}\b/;  // must have decimal — avoids date false-positives
+  const HDR_KW  = /\b(txn|value|date|narr|desc|particular|debit|credit|withdraw|deposit|balance|amount|dr|cr|ref|cheque|chq|voucher|remarks)\b/i;
+  const SKIP_RE = /^(page\b|s\.?no\b|sr\b|balance as on|opening balance|closing balance|total|grand total|brought forward|carried forward|statement of|account no|account name|branch|ifsc|micr|nomination|drawing|interest|mod bal|cif|ckycr|address|\*{3,})/i;
 
   const rawLines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
 
-  // ── STEP 1: Find header row ──
+  // ── STEP 1: Find header row (flexible — 1 or 2 keyword matches is enough) ──
   let hdrIdx = -1;
-  for (let i = 0; i < Math.min(rawLines.length, 50); i++) {
-    const cells = rawLines[i].split(/\t|  {2,}/).map(c=>c.trim()).filter(Boolean);
-    if (HDR_RE.test(rawLines[i]) && cells.length >= 3) { hdrIdx = i; break; }
+  for (let i = 0; i < Math.min(rawLines.length, 80); i++) {
+    if (SKIP_RE.test(rawLines[i])) continue;
+    const kwMatches = (rawLines[i].match(HDR_KW) || []).length;
+    if (kwMatches >= 2) { hdrIdx = i; break; }  // 2+ keywords = header row
   }
-  // Fallback: first line with date + amount pattern
+  // Wider fallback: any line with even 1 bank keyword near data rows
   if (hdrIdx === -1) {
-    for (let i = 0; i < Math.min(rawLines.length, 60); i++) {
+    for (let i = 0; i < Math.min(rawLines.length, 80); i++) {
+      if (SKIP_RE.test(rawLines[i])) continue;
+      if (HDR_KW.test(rawLines[i])) {
+        // Confirm: next 3 lines have dates or amounts
+        const nearby = rawLines.slice(i+1, i+4).join(" ");
+        if (DATE_RE.test(nearby) || AMT_RE.test(nearby)) { hdrIdx = i; break; }
+      }
+    }
+  }
+  // Last resort: find first data row with a date, treat line before it as header
+  if (hdrIdx === -1) {
+    for (let i = 1; i < Math.min(rawLines.length, 80); i++) {
       if (DATE_RE.test(rawLines[i]) && AMT_RE.test(rawLines[i])) {
-        hdrIdx = Math.max(0, i - 1); break;
+        hdrIdx = i - 1; break;
       }
     }
   }
   if (hdrIdx === -1) throw new Error(
-    "Could not find table headers in this PDF. Try downloading as Excel/CSV from your bank portal instead."
+    "Could not detect the table in this PDF. Please try CSV or Excel export from your bank portal."
   );
 
-  // ── STEP 2: Detect best separator ──
-  const sampleLines = rawLines.slice(hdrIdx, hdrIdx + 20);
+  // ── STEP 2: Detect separator (tab beats double-space beats single-space) ──
+  const sampleLines = rawLines.slice(hdrIdx, hdrIdx + 15).filter(l => l.length > 5);
   const tabScore   = sampleLines.reduce((s,l) => s + (l.match(/\t/g)||[]).length, 0);
-  const spaceScore = sampleLines.reduce((s,l) => s + (l.match(/  {2,}/g)||[]).length, 0);
-  const SEP = tabScore >= spaceScore ? /\t/ : /  {2,}/;
+  const sp2Score   = sampleLines.reduce((s,l) => s + (l.match(/  +/g)||[]).length, 0);
+  const SEP = tabScore > 0 ? /\t/ : sp2Score > 0 ? /  +/ : /\t/;
+  const splitLine = l => l.split(SEP).map(c => c.trim()).filter(Boolean);
 
-  const split = l => l.split(SEP).map(c => c.trim()).filter(Boolean);
+  // ── STEP 3: Handle multi-line headers ──
+  // Collect up to 3 consecutive non-data lines from hdrIdx as header rows
+  let hdrLines = [rawLines[hdrIdx]];
+  for (let k = 1; k <= 3; k++) {
+    const next = rawLines[hdrIdx + k] || "";
+    if (!next || DATE_RE.test(next) || AMT_RE.test(next) || SKIP_RE.test(next)) break;
+    if (HDR_KW.test(next) || splitLine(next).every(c => c.length < 25 && !/\d{4,}/.test(c))) {
+      hdrLines.push(next);
+    } else break;
+  }
+  const dataStartIdx = hdrIdx + hdrLines.length;
 
-  // ── STEP 3: Parse headers ──
-  const rawHdrs = split(rawLines[hdrIdx]);
-  // Multi-line header? (some banks have 2-row headers)
-  const nextCells = split(rawLines[hdrIdx + 1] || "");
-  const headers = (nextCells.length >= rawHdrs.length - 1 && !DATE_RE.test(rawLines[hdrIdx+1]))
-    ? rawHdrs.map((h, i) => (h + " " + (nextCells[i]||"")).trim())  // merge 2-row header
-    : rawHdrs;
+  // Merge multi-line headers: align by column position using tab/space boundaries
+  let headers;
+  if (hdrLines.length === 1) {
+    headers = splitLine(hdrLines[0]);
+  } else {
+    // Join all header text then re-split, OR column-merge by appending continuation words
+    const merged = hdrLines[0].split(SEP).map((cell, ci) => {
+      let full = cell.trim();
+      for (let k = 1; k < hdrLines.length; k++) {
+        const parts = hdrLines[k].split(SEP);
+        if (parts[ci]?.trim()) full = (full + " " + parts[ci].trim()).trim();
+      }
+      return full;
+    }).filter(Boolean);
+    // Also try simple join if merged gives fewer than 3 columns
+    headers = merged.length >= 3 ? merged : splitLine(hdrLines.join(" "));
+  }
 
-  // ── STEP 4: Parse data rows with wrapped-row merging ──
-  const dataLines = rawLines.slice(
-    hdrIdx + (nextCells.length >= rawHdrs.length - 1 && !DATE_RE.test(rawLines[hdrIdx+1]) ? 2 : 1)
-  );
+  // ── STEP 4: Find description column index (for wrapped-row merging) ──
+  const descCol = (() => {
+    const idx = headers.findIndex(h => /desc|narr|particular|remark|detail/i.test(h));
+    return idx >= 0 ? idx : headers.findIndex(h => !/date|debit|credit|balance|ref|chq|amount|dr|cr/i.test(h) && h.length > 0);
+  })();
+  const descIdx = descCol >= 0 ? descCol : 2; // default to column 2
 
+  // ── STEP 5: Parse data rows with multi-line description merging ──
   const rows = [];
   let pending = null;
 
-  const isDataRow = l => {
+  const flushPending = () => { if (pending) { rows.push(pending); pending = null; } };
+
+  const looksLikeDataRow = l => {
     if (SKIP_RE.test(l)) return false;
-    return DATE_RE.test(l) || (AMT_RE.test(l) && split(l).length >= 2);
+    const hasDate = DATE_RE.test(l);
+    const hasAmt  = AMT_RE.test(l);
+    const parts   = splitLine(l);
+    return (hasDate && parts.length >= 2) || (hasAmt && parts.length >= 3);
   };
 
-  const isWrappedContinuation = (l, prevCols) => {
-    if (SKIP_RE.test(l)) return false;
-    const cells = split(l);
-    // A continuation line: no date, no amount, short (1-3 cells), doesn't look like a new header
-    return !DATE_RE.test(l) && cells.length <= 3 && !HDR_RE.test(l);
+  const looksLikeContinuation = l => {
+    if (!l || SKIP_RE.test(l) || HDR_KW.test(l.split(/\s/)[0])) return false;
+    // No standalone date, no amount, short line
+    const parts = splitLine(l);
+    return !AMT_RE.test(l) && !DATE_RE.test(l) && parts.length <= 4 && l.length < 80;
   };
 
-  for (const line of dataLines) {
-    if (SKIP_RE.test(line)) { if (pending) { rows.push(pending); pending = null; } continue; }
+  for (let i = dataStartIdx; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    if (!line) continue;
+    if (SKIP_RE.test(line)) { flushPending(); continue; }
 
-    const cells = split(line);
-    if (cells.length === 0) continue;
-
-    if (isDataRow(line)) {
-      if (pending) rows.push(pending);
-      // Pad to header length
-      const padded = [...cells];
-      while (padded.length < headers.length) padded.push("");
-      pending = padded.slice(0, headers.length);
-    } else if (pending && isWrappedContinuation(line, pending)) {
-      // Append to narration/description column (usually col 1 or 2)
-      // Find best text column (first non-date, non-amount column)
-      const textColIdx = headers.findIndex(h => /narr|desc|particular|remark/i.test(h));
-      const tci = textColIdx >= 0 ? textColIdx : 1;
-      pending[tci] = (pending[tci] + " " + cells.join(" ")).trim();
+    if (looksLikeDataRow(line)) {
+      flushPending();
+      const cells = splitLine(line);
+      while (cells.length < headers.length) cells.push("");
+      pending = cells.slice(0, Math.max(headers.length, cells.length));
+    } else if (pending && looksLikeContinuation(line)) {
+      // Append to description column
+      const extra = splitLine(line).join(" ").trim();
+      if (extra) {
+        // Make sure pending is long enough
+        while (pending.length <= descIdx) pending.push("");
+        pending[descIdx] = (pending[descIdx] + " " + extra).trim();
+      }
+    } else {
+      flushPending();
     }
   }
-  if (pending) rows.push(pending);
+  flushPending();
 
-  if (!rows.length) throw new Error("PDF table found but no data rows extracted. Try Excel/CSV export.");
-  return { headers, rows };
+  // Remove rows that are clearly empty or just whitespace
+  const clean = rows.filter(r => r.some(c => c && c.trim()));
+  if (!clean.length) throw new Error("PDF table detected but no transactions found. Try Excel/CSV export.");
+  return { headers, rows: clean };
 }
 
 // ── Auto-detect mapping from any set of headers ──────────────────────────
@@ -836,9 +882,9 @@ function autoDetectMapping(headers) {
 
   // Date
   m.date = pick([
-    [/^valuedate$/, 10], [/^txndate$/, 10], [/^transactiondate$/, 9],
-    [/^date$/, 9], [/^postingdate$/, 8], [/valuedate/, 7],
-    [/date/, 4], [/dt$/, 2],
+    [/^txndate$/, 10], [/^valuedate$/, 10], [/^transactiondate$/, 9],
+    [/^date$/, 9], [/^postingdate$/, 8], [/txndate/, 8], [/valuedate/, 7],
+    [/^date$/, 9], [/date/, 4], [/dt$/, 2],
   ]);
   const dateIdx = m.date ? headers.indexOf(m.date) : -1;
 
@@ -882,7 +928,8 @@ function autoDetectMapping(headers) {
   // Reference
   m.ref = pick([
     [/^chequeno$/, 10], [/^chqno$/, 10], [/^referencenumber$/, 9], [/^refno$/, 9],
-    [/^utr$/, 9], [/^transactionid$/, 8], [/cheque/, 5], [/^ref/, 4], [/utr/, 4],
+    [/^utr$/, 9], [/^transactionid$/, 8], [/refnochequeno/, 10], // SBI "Ref No./Cheque No."
+    [/cheque/, 5], [/^ref/, 4], [/utr/, 4],
   ]);
 
   return m;
