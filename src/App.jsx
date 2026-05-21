@@ -218,29 +218,11 @@ function sendToExtension(msg, timeoutMs = 10000) {
   });
 }
 
-// Generic POST to Tally via extension, with direct fetch fallback
+// Generic POST to Tally via the Chrome extension (required — app runs on HTTPS,
+// so direct HTTP to localhost is blocked by mixed-content policy)
 async function tallyPost(host, port, xmlBody, timeoutMs = 10000) {
-  // Try direct HTTP first (works when app is served from localhost / same network)
-  try {
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), Math.min(timeoutMs, 5000));
-    const r = await fetch(`http://${host}:${port}`, {
-      method: "POST",
-      headers: { "Content-Type": "text/xml;charset=utf-8" },
-      body: xmlBody,
-      signal: ctrl.signal,
-    });
-    clearTimeout(id);
-    if (r.ok) {
-      const text = await r.text();
-      return text;
-    }
-  } catch (_directErr) {
-    // Direct fetch failed (CORS or network) — fall through to extension
-  }
-  // Fall back to extension
   if (!_extensionReady) {
-    throw new Error("Cannot reach Tally directly. Install the Bank2Tally Connector extension (Settings → Tally Gateway) or run the app locally.");
+    throw new Error("EXTENSION_NOT_READY");
   }
   const res = await sendToExtension({
     type: "TALLY_REQUEST",
@@ -327,29 +309,14 @@ async function fetchTallyLedgers(host, port, companyName) {
   return all.length ? all : null; // null = use built-in fallback
 }
 
-// Test connection — tries direct fetch first, then extension
+// Test connection via extension
 async function testTallyConnection(host, port) {
-  // Try direct HTTP ping first
-  try {
-    const pingXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch(`http://${host}:${port}`, {
-      method: "POST",
-      headers: { "Content-Type": "text/xml;charset=utf-8" },
-      body: pingXml,
-      signal: ctrl.signal,
-    });
-    clearTimeout(id);
-    if (r.ok) return true;
-  } catch (_) {}
-  // Fall back to extension
   if (!_extensionReady) {
-    throw new Error("Cannot reach Tally. Make sure Tally is open and the Bank2Tally Connector extension is installed.");
+    throw new Error("Bank2Tally Connector extension not detected. Please install it from the instructions below, then refresh this page.");
   }
-  const res = await sendToExtension({ type: "TALLY_PING", host, port }, 6000);
+  const res = await sendToExtension({ type: "TALLY_PING", host, port }, 8000);
   if (res.success) return true;
-  throw new Error(res.error || "Cannot reach Tally");
+  throw new Error(res.error || "Extension is installed but cannot reach Tally. Make sure Tally is open on this computer.");
 }
 
 // ── useTallyGateway hook ─────────────────────────────────────────
@@ -385,15 +352,46 @@ function useTallyGateway(host = "localhost", port = "9000") {
         } catch { /* ignore */ }
       });
     } catch (e) {
-      setStatus("error"); setError(e.message);
-      setCompanies([]);
+      if (e.message === "EXTENSION_NOT_READY") {
+        // Extension wasn't ready yet — stay idle, the useEffect listener will retry
+        setStatus("idle"); setError("");
+      } else {
+        setStatus("error"); setError(e.message);
+        setCompanies([]);
+      }
     }
   }, []);
 
-  // Auto-connect on mount
-  useEffect(() => { fetch_(host, port); }, []); // eslint-disable-line
+  // Connect once extension is ready — listen for its presence signal
+  useEffect(() => {
+    // If already ready (e.g. page reload with extension active), connect immediately
+    if (_extensionReady) {
+      fetch_(host, port);
+      return;
+    }
+    // Otherwise wait for the extension presence message
+    const handler = (e) => {
+      if (e.data?.type === "BANK2TALLY_EXTENSION_PRESENT") {
+        fetch_(host, port);
+      }
+    };
+    window.addEventListener("message", handler);
+    // Send pings to prompt the extension to identify itself
+    window.postMessage({ type: "CHECK_EXTENSION" }, "*");
+    const ping2 = setTimeout(() => window.postMessage({ type: "CHECK_EXTENSION" }, "*"), 1000);
+    const ping3 = setTimeout(() => window.postMessage({ type: "CHECK_EXTENSION" }, "*"), 3000);
+    // After 5s with no response, mark as error so UI shows "Offline"
+    const giveUp = setTimeout(() => {
+      setStatus(s => s === "connecting" || s === "idle" ? "error" : s);
+      setError("Bank2Tally Connector extension not detected. Install it from Settings.");
+    }, 5000);
+    return () => {
+      window.removeEventListener("message", handler);
+      clearTimeout(ping2); clearTimeout(ping3); clearTimeout(giveUp);
+    };
+  }, []); // eslint-disable-line
 
-  // Re-fetch when host/port change (debounced)
+  // Re-fetch when host/port change (call manually or via refetch)
   const refetch = useCallback((h, p) => fetch_(h || host, p || port), [fetch_, host, port]);
 
   return { status, companies, ledgerMap, error, lastFetch, refetch };
@@ -912,26 +910,10 @@ function ExtensionStatus() {
     window.addEventListener("message", handler);
     window.postMessage({ type: "CHECK_EXTENSION" }, "*");
 
-    // After 1.5s with no signal, attempt a direct Tally ping as final check
-    const timer = setTimeout(async () => {
-      if (_extensionReady || window.__bank2tallyExtension) {
-        setStatus("installed");
-        return;
-      }
-      // Try a direct ping to localhost:9000 — if it works the extension isn't needed
-      try {
-        const ctrl = new AbortController();
-        setTimeout(() => ctrl.abort(), 2000);
-        const r = await fetch("http://localhost:9000", {
-          method: "POST",
-          headers: { "Content-Type": "text/xml;charset=utf-8" },
-          body: "<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER></ENVELOPE>",
-          signal: ctrl.signal,
-        });
-        if (r.ok || r.status > 0) { setStatus("installed"); return; }
-      } catch (_) {}
-      setStatus(window.__bank2tallyExtension ? "installed" : "missing");
-    }, 1500);
+    // After 2s with no signal, mark as missing
+    const timer = setTimeout(() => {
+      setStatus(_extensionReady || window.__bank2tallyExtension ? "installed" : "missing");
+    }, 2000);
 
     return () => { window.removeEventListener("message", handler); clearTimeout(timer); };
   }, []);
@@ -1447,8 +1429,15 @@ function DashboardScreen({ history, setScreen, user, tally }) {
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {tally?.status === "ok" && <Pill color="green" dot>Tally Live · {tally.companies.length} co.</Pill>}
-          {tally?.status === "connecting" && <Pill color="amber" dot>Tally…</Pill>}
-          {tally?.status === "error" && <Pill color="red" dot>Tally Offline</Pill>}
+          {tally?.status === "connecting" && <Pill color="amber" dot>Connecting…</Pill>}
+          {tally?.status === "idle" && <Pill color="amber" dot>Waiting for extension…</Pill>}
+          {tally?.status === "error" && (
+            <span style={{display:"flex",alignItems:"center",gap:6}}>
+              <Pill color="red" dot>Tally Offline</Pill>
+              <button onClick={()=>tally.refetch()} title="Retry connection"
+                style={{fontSize:13,background:"none",border:"none",cursor:"pointer",color:T.textDim,padding:"2px 4px"}}>↺</button>
+            </span>
+          )}
           <Btn onClick={() => setScreen(SCREENS.UPLOAD)} icon="+" size="lg">New Import</Btn>
         </div>
       </div>
