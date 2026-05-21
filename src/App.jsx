@@ -179,11 +179,22 @@ function tallyRequest(body) {
 
 // Check if extension is installed
 let _extensionReady = false;
+function _markExtensionReady() {
+  _extensionReady = true;
+  window.__bank2tallyExtension = true; // sync both flags
+}
 window.addEventListener("message", (e) => {
   if (e.data?.type === "BANK2TALLY_EXTENSION_PRESENT") {
-    _extensionReady = true;
+    _markExtensionReady();
   }
 });
+// Ping on load — extension may have already sent its signal before listener registered
+setTimeout(() => {
+  window.postMessage({ type: "CHECK_EXTENSION" }, "*");
+}, 100);
+setTimeout(() => {
+  window.postMessage({ type: "CHECK_EXTENSION" }, "*");
+}, 1500);
 
 // Send message to extension and wait for response
 function sendToExtension(msg, timeoutMs = 10000) {
@@ -207,10 +218,29 @@ function sendToExtension(msg, timeoutMs = 10000) {
   });
 }
 
-// Generic POST to Tally via extension
+// Generic POST to Tally via extension, with direct fetch fallback
 async function tallyPost(host, port, xmlBody, timeoutMs = 10000) {
+  // Try direct HTTP first (works when app is served from localhost / same network)
+  try {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), Math.min(timeoutMs, 5000));
+    const r = await fetch(`http://${host}:${port}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/xml;charset=utf-8" },
+      body: xmlBody,
+      signal: ctrl.signal,
+    });
+    clearTimeout(id);
+    if (r.ok) {
+      const text = await r.text();
+      return text;
+    }
+  } catch (_directErr) {
+    // Direct fetch failed (CORS or network) — fall through to extension
+  }
+  // Fall back to extension
   if (!_extensionReady) {
-    throw new Error("Bank2Tally Connector extension not installed. Please install it from Settings.");
+    throw new Error("Cannot reach Tally directly. Install the Bank2Tally Connector extension (Settings → Tally Gateway) or run the app locally.");
   }
   const res = await sendToExtension({
     type: "TALLY_REQUEST",
@@ -297,10 +327,25 @@ async function fetchTallyLedgers(host, port, companyName) {
   return all.length ? all : null; // null = use built-in fallback
 }
 
-// Test connection via extension
+// Test connection — tries direct fetch first, then extension
 async function testTallyConnection(host, port) {
+  // Try direct HTTP ping first
+  try {
+    const pingXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`http://${host}:${port}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/xml;charset=utf-8" },
+      body: pingXml,
+      signal: ctrl.signal,
+    });
+    clearTimeout(id);
+    if (r.ok) return true;
+  } catch (_) {}
+  // Fall back to extension
   if (!_extensionReady) {
-    throw new Error("Bank2Tally Connector extension not installed. Install it from Settings → Tally Gateway.");
+    throw new Error("Cannot reach Tally. Make sure Tally is open and the Bank2Tally Connector extension is installed.");
   }
   const res = await sendToExtension({ type: "TALLY_PING", host, port }, 6000);
   if (res.success) return true;
@@ -321,6 +366,7 @@ function useTallyGateway(host = "localhost", port = "9000") {
     setStatus("connecting"); setError("");
     try {
       const cos = await fetchTallyCompanies(h, p);
+      _markExtensionReady(); // connection worked — mark as ready
       setCompanies(cos);
       setStatus("ok");
       setLastFetch(new Date());
@@ -850,20 +896,43 @@ function ExtensionStatus() {
   const [status, setStatus] = useState("checking"); // checking | installed | missing
 
   useEffect(() => {
-    // Check if extension sent presence signal
-    const timer = setTimeout(() => {
-      setStatus(window.__bank2tallyExtension ? "installed" : "missing");
-    }, 800);
+    // If either flag already set (e.g. from earlier ping), resolve immediately
+    if (_extensionReady || window.__bank2tallyExtension) {
+      setStatus("installed");
+      return;
+    }
 
     const handler = (e) => {
       if (e.data?.type === "BANK2TALLY_EXTENSION_PRESENT") {
-        window.__bank2tallyExtension = true;
+        _markExtensionReady();
         setStatus("installed");
         clearTimeout(timer);
       }
     };
     window.addEventListener("message", handler);
     window.postMessage({ type: "CHECK_EXTENSION" }, "*");
+
+    // After 1.5s with no signal, attempt a direct Tally ping as final check
+    const timer = setTimeout(async () => {
+      if (_extensionReady || window.__bank2tallyExtension) {
+        setStatus("installed");
+        return;
+      }
+      // Try a direct ping to localhost:9000 — if it works the extension isn't needed
+      try {
+        const ctrl = new AbortController();
+        setTimeout(() => ctrl.abort(), 2000);
+        const r = await fetch("http://localhost:9000", {
+          method: "POST",
+          headers: { "Content-Type": "text/xml;charset=utf-8" },
+          body: "<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER></ENVELOPE>",
+          signal: ctrl.signal,
+        });
+        if (r.ok || r.status > 0) { setStatus("installed"); return; }
+      } catch (_) {}
+      setStatus(window.__bank2tallyExtension ? "installed" : "missing");
+    }, 1500);
+
     return () => { window.removeEventListener("message", handler); clearTimeout(timer); };
   }, []);
 
@@ -2275,9 +2344,11 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
     setTesting(true); setTestResult(null); setTestMsg("");
     try {
       await testTallyConnection(tallyHost, tallyPort);
+      // Mark extension/connection as ready globally so all other checks pass
+      _markExtensionReady();
       setTestResult("ok"); setTestMsg(`Connected! Fetching companies…`);
       tally.refetch(tallyHost, tallyPort);
-      setTimeout(() => setTestMsg(`Connected · ${tally.companies.length} companies loaded`), 2000);
+      setTimeout(() => setTestMsg(`Connected · ${tally.companies.length} companies loaded`), 2500);
     } catch (e) {
       setTestResult("error"); setTestMsg(e.message);
     } finally { setTesting(false); }
@@ -2422,10 +2493,26 @@ function UserManagementScreen({ adminUser }) {
     setLoading(true);
     try {
       const profiles = await sb.from("profiles", "select=*&order=created_at.asc");
-      // Enrich with last_sign_in from auth (best-effort)
+
+      // Try to fetch auth user list for emails (requires admin JWT — best effort)
+      let authEmailMap = {};
+      try {
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1000`, {
+          headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${sb._token || SUPABASE_ANON}` }
+        });
+        if (res.ok) {
+          const d = await res.json();
+          const list = d.users || d || [];
+          list.forEach(u => { if (u.id && u.email) authEmailMap[u.id] = u.email; });
+        }
+      } catch {}
+
       setUsers(profiles.map(p => ({
         ...p,
+        email: p.email || authEmailMap[p.id] || "",
         avatar: p.avatar || (p.name || "?").slice(0,2).toUpperCase(),
+        // Sanitize company: if it's a pure number it's likely a DB artifact
+        company: (p.company && isNaN(String(p.company).trim())) ? p.company : (p.company ? "" : ""),
       })));
     } catch (e) {
       notify("Error loading users: " + e.message, "error");
@@ -2661,7 +2748,23 @@ function UserManagementScreen({ adminUser }) {
                 <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                   {/* View */}
                   <button title="View Profile" disabled={actioning===u.id}
-                    onClick={() => setViewUser(u)}
+                    onClick={async () => {
+                      // Resolve approved_by UUID → name using already-loaded users list
+                      const approvedByName = u.approved_by
+                        ? (users.find(x => x.id === u.approved_by)?.name || u.approved_by)
+                        : "—";
+                      // Fetch email from Supabase auth (admin users endpoint)
+                      let email = u.email || "";
+                      if (!email) {
+                        try {
+                          const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${u.id}`, {
+                            headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${sb._token || SUPABASE_ANON}` }
+                          });
+                          if (res.ok) { const d = await res.json(); email = d.email || ""; }
+                        } catch {}
+                      }
+                      setViewUser({ ...u, email, approvedByName });
+                    }}
                     style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.border}`, background:T.surface, color:T.textMid, transition:"all 0.15s" }}>
                     👁
                   </button>
@@ -2748,7 +2851,7 @@ function UserManagementScreen({ adminUser }) {
               </div>
               <div>
                 <div style={{ fontSize:17, fontWeight:700, color:T.text, marginBottom:4 }}>{viewUser.name}</div>
-                <div style={{ fontSize:12, color:T.textDim, marginBottom:6 }}>{viewUser.email}</div>
+                <div style={{ fontSize:12, color:T.textDim, marginBottom:6 }}>{viewUser.email || <span style={{color:T.textDim,fontStyle:"italic"}}>loading email…</span>}</div>
                 <div style={{ display:"flex", gap:6 }}>
                   <Pill color={roleColor(viewUser.role)} size="xs">{viewUser.role||"user"}</Pill>
                   <Pill color={statusColor(viewUser.status)} size="xs" dot>{viewUser.status}</Pill>
@@ -2757,10 +2860,11 @@ function UserManagementScreen({ adminUser }) {
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:8, fontSize:13 }}>
               {[
-                ["🏢","Company",   viewUser.company || "—"],
+                ["🏢","Company",   (viewUser.company && isNaN(viewUser.company)) ? viewUser.company : (viewUser.company ? `ID: ${viewUser.company}` : "—")],
+                ["✉","Email",     viewUser.email || "—"],
                 ["🪪","User ID",   viewUser.id],
                 ["📅","Joined",    viewUser.created_at ? new Date(viewUser.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"],
-                ["✅","Approved By", viewUser.approved_by || "—"],
+                ["✅","Approved By", viewUser.approvedByName || viewUser.approved_by || "—"],
                 ["🕒","Approved At", viewUser.approved_at ? new Date(viewUser.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"],
               ].map(([icon, label, val]) => (
                 <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"8px 12px", background:T.surface, borderRadius:8 }}>
