@@ -196,18 +196,31 @@ setTimeout(() => {
   window.postMessage({ type: "CHECK_EXTENSION" }, "*");
 }, 1500);
 
-// Send message to extension and wait for response
+// Send message to extension and wait for response.
+// Handles multiple response naming conventions since different extension builds
+// may respond with: TYPE_RESPONSE, TALLY_RESPONSE, or BANK2TALLY_RESPONSE.
 function sendToExtension(msg, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const requestId = Math.random().toString(36).slice(2);
-    const responseType = msg.type + "_RESPONSE";
+    // Accept any of these response type names
+    const acceptedTypes = new Set([
+      msg.type + "_RESPONSE",      // e.g. TALLY_REQUEST_RESPONSE
+      "TALLY_RESPONSE",            // generic response
+      "TALLY_REQUEST_RESPONSE",    // explicit
+      "BANK2TALLY_RESPONSE",       // alternate naming
+      "TALLY_PING_RESPONSE",       // ping response
+    ]);
     const timer = setTimeout(() => {
       window.removeEventListener("message", handler);
-      reject(new Error("Extension response timed out"));
+      reject(new Error("Extension timed out — make sure Tally is open and the extension is active"));
     }, timeoutMs);
 
     function handler(e) {
-      if (e.data?.type === responseType && e.data?.requestId === requestId) {
+      if (!e.data?.type) return;
+      // Match by type (with OR without requestId — support both strict and broadcast modes)
+      const typeMatch = acceptedTypes.has(e.data.type);
+      const idMatch = !e.data.requestId || e.data.requestId === requestId;
+      if (typeMatch && idMatch) {
         clearTimeout(timer);
         window.removeEventListener("message", handler);
         resolve(e.data);
@@ -241,22 +254,36 @@ function parseTallyTags(xml, tag) {
   return results;
 }
 
-// Fetch all companies from Tally
+// Fetch all companies from Tally — tries multiple XML formats for Tally Prime / ERP9
 async function fetchTallyCompanies(host, port) {
-  const xml = `<ENVELOPE>
-    <HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
-    <BODY><EXPORTDATA><REQUESTDESC>
-      <REPORTNAME>List of Companies</REPORTNAME>
-      <STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES>
-    </REQUESTDESC></EXPORTDATA></BODY>
-  </ENVELOPE>`;
-  const raw = await tallyPost(host, port, xml);
-  const names = parseTallyTags(raw, "COMPANY");
-  // Also try BASICCOMPANYNAME tag (Tally Prime)
-  const prime = parseTallyTags(raw, "BASICCOMPANYNAME");
-  const all = [...new Set([...names, ...prime])].filter(Boolean);
-  if (!all.length) throw new Error("Tally responded but returned no companies. Make sure at least one company is loaded in Tally.");
-  return all.map((name, i) => ({ id: `tc${i}`, name, gstin: "", state: "", fy: "2024-25" }));
+  // Format 1: Tally Prime standard
+  const xml1 = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  // Format 2: Tally ERP 9 / older Prime
+  const xml2 = `<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Data</TYPE><ID>List of Companies</ID></HEADER><BODY><DESC><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></DESC></BODY></ENVELOPE>`;
+
+  let raw = "";
+  try { raw = await tallyPost(host, port, xml1); }
+  catch(e) {
+    if (e.message === "EXTENSION_NOT_READY") throw e;
+    try { raw = await tallyPost(host, port, xml2); } catch(e2) { throw e; }
+  }
+
+  // Try all known company tag names across Tally versions
+  const tags = ["COMPANY", "BASICCOMPANYNAME", "REMOTECMPINFO.LIST", "CMPINFO.LIST"];
+  let names = [];
+  for (const tag of tags) {
+    const found = parseTallyTags(raw, tag).filter(n => n && !n.includes("<") && n.trim().length > 0);
+    names.push(...found);
+  }
+  // Also try extracting from NAME tags inside COMPANY elements
+  const allNames = [...new Set(names)].filter(Boolean);
+
+  if (!allNames.length) {
+    // Log raw response for debugging
+    console.warn("Tally company fetch — raw response:", raw?.slice(0, 500));
+    throw new Error("Tally is connected but returned no companies. Make sure at least one company is open in Tally Prime.");
+  }
+  return allNames.map((name, i) => ({ id: `tc${i}`, name, gstin: "", state: "", fy: "2024-25" }));
 }
 
 // Fetch company details (GSTIN, state, FY) for a specific company
@@ -2335,9 +2362,23 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
       await testTallyConnection(tallyHost, tallyPort);
       // Mark extension/connection as ready globally so all other checks pass
       _markExtensionReady();
-      setTestResult("ok"); setTestMsg(`Connected! Fetching companies…`);
-      tally.refetch(tallyHost, tallyPort);
-      setTimeout(() => setTestMsg(`Connected · ${tally.companies.length} companies loaded`), 2500);
+      setTestResult("ok"); setTestMsg("Connected! Fetching companies from Tally…");
+      // Small delay to ensure _extensionReady propagates before gateway fetch
+      setTimeout(() => {
+        tally.refetch(tallyHost, tallyPort);
+      }, 200);
+      // Watch tally status reactively — update message when companies load
+      let attempts = 0;
+      const watchInterval = setInterval(() => {
+        attempts++;
+        if (tally.status === "ok") {
+          setTestMsg(`Connected · ${tally.companies.length} ${tally.companies.length === 1 ? "company" : "companies"} loaded`);
+          clearInterval(watchInterval);
+        } else if (tally.status === "error" || attempts > 10) {
+          setTestMsg(tally.status === "error" ? `Error: ${tally.error}` : "Connected · 0 companies (open a company in Tally)");
+          clearInterval(watchInterval);
+        }
+      }, 500);
     } catch (e) {
       setTestResult("error"); setTestMsg(e.message);
     } finally { setTesting(false); }
