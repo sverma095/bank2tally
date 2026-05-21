@@ -643,7 +643,8 @@ async function loadScript(src) {
   });
 }
 
-// ── PDF text extraction: uses X/Y positions to reconstruct column layout ──
+// ── PDF text extraction: reconstructs columns using X/Y positions ──
+// Handles right-aligned numbers (SBI, HDFC), wrapped rows, multi-page statements
 async function extractPdfText(buf) {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
   const lib = window["pdfjs-dist/build/pdf"];
@@ -657,45 +658,85 @@ async function extractPdfText(buf) {
     const page = await pdf.getPage(p);
     const vp   = page.getViewport({ scale: 1 });
     const ct   = await page.getTextContent();
-    ct.items.forEach(it => allItems.push({
-      p, x: it.transform[4], y: it.transform[5],
-      w: it.width, str: it.str, pageH: vp.height,
-    }));
+    ct.items.forEach(it => {
+      if (it.str.trim()) allItems.push({
+        p, x: Math.round(it.transform[4]), y: Math.round(it.transform[5]),
+        w: Math.ceil(it.width), str: it.str, pageH: vp.height,
+      });
+    });
   }
   if (!allItems.length) return "";
 
-  // Build global column bucket boundaries from X positions
-  const xs = [...new Set(allItems.map(i => Math.round(i.x)))].sort((a,b)=>a-b);
-  const buckets = [xs[0]];
-  for (let i = 1; i < xs.length; i++) {
-    if (xs[i] - xs[i-1] > 18) buckets.push(xs[i]); // 18pt gap = new column
+  // ── Group items into lines by (page, Y) with 4pt tolerance ──
+  const lineMap = {};
+  allItems.forEach(it => {
+    const ry  = Math.round(it.y / 4) * 4;
+    const key = `${it.p}_${String(9999 - ry).padStart(5,"0")}`; // sort top→bottom
+    if (!lineMap[key]) lineMap[key] = { p: it.p, y: ry, items: [] };
+    lineMap[key].items.push(it);
+  });
+
+  // Sort lines top→bottom per page
+  const sortedLines = Object.values(lineMap).sort((a,b) =>
+    a.p !== b.p ? a.p - b.p : b.y - a.y
+  );
+
+  // ── For each line, sort items left→right then merge adjacent items into words ──
+  // Items within 4pt of each other horizontally = same word (handles split chars in amounts)
+  const mergeLineItems = items => {
+    const sorted = [...items].sort((a,b) => a.x - b.x);
+    const words = [];
+    let cur = { x: sorted[0].x, endX: sorted[0].x + sorted[0].w, str: sorted[0].str };
+    for (let i = 1; i < sorted.length; i++) {
+      const it = sorted[i];
+      const gap = it.x - cur.endX;
+      if (gap <= 6) {
+        // Adjacent — merge (handles split digits in right-aligned numbers)
+        cur.str += it.str;
+        cur.endX = Math.max(cur.endX, it.x + it.w);
+      } else {
+        words.push(cur);
+        cur = { x: it.x, endX: it.x + it.w, str: it.str };
+      }
+    }
+    words.push(cur);
+    return words;
+  };
+
+  // ── Determine column boundaries using word start-X positions from header area ──
+  // Strategy: collect words from all lines, cluster X positions with 28pt gap = new column
+  const allWords = sortedLines.flatMap(l => mergeLineItems(l.items));
+  const allX = allWords.map(w => w.x).sort((a,b) => a-b);
+
+  const colBuckets = [allX[0]];
+  for (let i = 1; i < allX.length; i++) {
+    if (allX[i] - allX[i-1] > 28) colBuckets.push(allX[i]);
   }
+
   const colOf = x => {
     let best = 0, bestD = Infinity;
-    buckets.forEach((bx, bi) => { const d = Math.abs(x - bx); if (d < bestD) { bestD = d; best = bi; } });
+    colBuckets.forEach((bx, bi) => {
+      const d = Math.abs(x - bx);
+      if (d < bestD) { bestD = d; best = bi; }
+    });
     return best;
   };
 
-  // Group by (page, rounded-Y)
-  const lineMap = {};
-  allItems.forEach(it => {
-    const ry  = Math.round(it.y / 3) * 3;
-    const key = `${it.p}__${String(ry).padStart(6,"0")}`;
-    if (!lineMap[key]) lineMap[key] = { p: it.p, y: ry, cols: {} };
-    const c = colOf(it.x);
-    if (!lineMap[key].cols[c]) lineMap[key].cols[c] = [];
-    lineMap[key].cols[c].push(it.str);
-  });
-
-  const sorted = Object.values(lineMap).sort((a,b) =>
-    a.p !== b.p ? a.p - b.p : b.y - a.y);
-
-  return sorted.map(line => {
-    const max = Math.max(...Object.keys(line.cols).map(Number));
+  // ── Build TSV output — one tab per column bucket ──
+  const outputLines = sortedLines.map(line => {
+    const words = mergeLineItems(line.items);
+    const cols = {};
+    words.forEach(w => {
+      const c = colOf(w.x);
+      cols[c] = (cols[c] ? cols[c] + " " : "") + w.str.trim();
+    });
+    const maxC = Math.max(...Object.keys(cols).map(Number));
     const parts = [];
-    for (let c = 0; c <= max; c++) parts.push((line.cols[c]||[]).join("").trim());
+    for (let c = 0; c <= maxC; c++) parts.push((cols[c] || "").trim());
     return parts.join("\t");
-  }).filter(l => l.trim()).join("\n");
+  }).filter(l => l.replace(/\t/g,"").trim());
+
+  return outputLines.join("\n");
 }
 
 // ── OCR fallback for scanned PDFs ──
@@ -762,6 +803,8 @@ function parsePdfText(rawText) {
   if (hdrIdx === -1) throw new Error(
     "Could not detect the table in this PDF. Please try CSV or Excel export from your bank portal."
   );
+  console.info("PDF parser: header at line", hdrIdx, "→", rawLines[hdrIdx]);
+  console.info("PDF parser: sample data lines:", rawLines.slice(hdrIdx+1, hdrIdx+5));
 
   // ── STEP 2: Detect separator (tab beats double-space beats single-space) ──
   const sampleLines = rawLines.slice(hdrIdx, hdrIdx + 15).filter(l => l.length > 5);
@@ -813,19 +856,27 @@ function parsePdfText(rawText) {
 
   const flushPending = () => { if (pending) { rows.push(pending); pending = null; } };
 
+  // Also match partial date formats: "1 Apr", "10 Apr 2025", "2025" alone (SBI wraps dates)
+  const PARTIAL_DATE_RE = /\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}|\d{1,2}\/\d{1,2})\b/i;
+
   const looksLikeDataRow = l => {
     if (SKIP_RE.test(l)) return false;
-    const hasDate = DATE_RE.test(l);
+    const hasDate = DATE_RE.test(l) || PARTIAL_DATE_RE.test(l);
     const hasAmt  = AMT_RE.test(l);
     const parts   = splitLine(l);
-    return (hasDate && parts.length >= 2) || (hasAmt && parts.length >= 3);
+    // Data row: has a date (full or partial) OR has amount with multiple columns
+    return (hasDate && parts.length >= 1) || (hasAmt && parts.length >= 2);
   };
 
   const looksLikeContinuation = l => {
-    if (!l || SKIP_RE.test(l) || HDR_KW.test(l.split(/\s/)[0])) return false;
-    // No standalone date, no amount, short line
+    if (!l || SKIP_RE.test(l)) return false;
     const parts = splitLine(l);
-    return !AMT_RE.test(l) && !DATE_RE.test(l) && parts.length <= 4 && l.length < 80;
+    // NOT a continuation if it has an amount (it's a new row or amount continuation)
+    if (AMT_RE.test(l)) return false;
+    // NOT a continuation if it looks like a standalone date row (SBI "2025" year fragment)
+    if (/^\d{4}$/.test(l.trim())) return false;
+    // IS a continuation: no full date, no amount, short descriptive text
+    return !DATE_RE.test(l) && parts.length <= 5 && l.length < 120;
   };
 
   for (let i = dataStartIdx; i < rawLines.length; i++) {
@@ -838,11 +889,21 @@ function parsePdfText(rawText) {
       const cells = splitLine(line);
       while (cells.length < headers.length) cells.push("");
       pending = cells.slice(0, Math.max(headers.length, cells.length));
+    } else if (pending && AMT_RE.test(line) && !DATE_RE.test(line)) {
+      // Amount-only continuation line (SBI: amounts appear on separate line from date+desc)
+      // Merge amounts into pending row by filling empty numeric columns right-to-left
+      const amts = line.match(/\b\d{1,3}(?:,\d{2,3})*\.\d{2}\b/g) || [];
+      // Find empty numeric-looking columns (debit/credit/balance positions)
+      let ai = amts.length - 1;
+      for (let ci = pending.length - 1; ci >= 0 && ai >= 0; ci--) {
+        if (!pending[ci] || pending[ci] === "") {
+          pending[ci] = amts[ai--];
+        }
+      }
     } else if (pending && looksLikeContinuation(line)) {
       // Append to description column
       const extra = splitLine(line).join(" ").trim();
       if (extra) {
-        // Make sure pending is long enough
         while (pending.length <= descIdx) pending.push("");
         pending[descIdx] = (pending[descIdx] + " " + extra).trim();
       }
