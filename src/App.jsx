@@ -649,7 +649,7 @@ async function extractPdfText(buf) {
   lib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-  const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const pdf = await lib.getDocument({ data: new Uint8Array(buf), disableWorker: false }).promise;
   const allItems = [];
 
   for (let p = 1; p <= pdf.numPages; p++) {
@@ -704,7 +704,7 @@ async function ocrPdfText(buf, onProgress) {
   const lib = window["pdfjs-dist/build/pdf"];
   lib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-  const pdf    = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const pdf    = await lib.getDocument({ data: new Uint8Array(buf), disableWorker: false }).promise;
   const worker = await window.Tesseract.createWorker("eng");
   let out = "";
   for (let p = 1; p <= pdf.numPages; p++) {
@@ -895,20 +895,29 @@ async function parseFile(file, onProgress) {
 
   // ── PDF ──
   if (ext === "pdf") {
-    const buf   = await file.arrayBuffer();
-    const bytes = new Uint8Array(buf.slice(0, 2048));
-    const sig   = new TextDecoder("latin1").decode(bytes);
+    // Read once into a plain byte array — never pass the ArrayBuffer directly
+    // because pdfjs transfers (detaches) it on first use, breaking any second use
+    const rawBuf = await file.arrayBuffer();
+    const fileBytes = new Uint8Array(rawBuf); // keep as Uint8Array, copy as needed
+
+    // Check for encryption using a fresh slice
+    const sig = new TextDecoder("latin1").decode(fileBytes.slice(0, 2048));
     if (/\/Encrypt/i.test(sig)) {
       const e = new Error("This PDF is password-protected. Please remove the password and try again."); e.code="ERR_002"; throw e;
     }
+
     onProgress && onProgress("Reading PDF…");
     let text = "";
-    try { text = await extractPdfText(buf); } catch(e) { text = ""; }
+    try {
+      // Pass a COPY so pdfjs can transfer it without affecting our fileBytes
+      text = await extractPdfText(fileBytes.slice().buffer);
+    } catch(e) { text = ""; }
 
     const wordCount = (text.match(/\w+/g)||[]).length;
     if (wordCount < 30) {
       onProgress && onProgress("Scanned PDF — running OCR (may take 30–60 s)…");
-      text = await ocrPdfText(buf, onProgress);
+      // Pass another fresh copy for OCR
+      text = await ocrPdfText(fileBytes.slice().buffer, onProgress);
     }
     onProgress && onProgress("Parsing table…");
     return parsePdfText(text);
