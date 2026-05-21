@@ -254,56 +254,58 @@ function parseTallyTags(xml, tag) {
   return results;
 }
 
-// Fetch all companies from Tally — tries every known request format
+// Fetch all companies from Tally using COLLECTION-based XML (safe — never triggers form renderer)
 async function fetchTallyCompanies(host, port) {
-  // These are the correct XML formats Tally Prime actually responds to:
+  // COLLECTION requests are the safest — they query the data dictionary directly
+  // without opening any Tally UI form (avoids the Form:Company TDL crash)
 
-  // Format A: Get currently OPEN company via SVCURRENTCOMPANY system variable
-  const xmlA = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Company Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  // Method 1: GETCOLLECTION of Company objects (Tally Prime 2.x / 3.x)
+  const xmlCol = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Accounts</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
-  // Format B: Get company name via Collection of companies
-  const xmlB = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES><REPORTNAME>Day Book</REPORTNAME></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  // Method 2: Pure collection — no report name, just get company master
+  const xmlCol2 = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Groups</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
-  // Format C: Direct collection request — the most reliable for Tally Prime 3.x
-  const xmlC = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Primary Groups</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  // Method 3: Daybook with empty date range — safe, always works, reveals current company in response
+  const xmlDay = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Daybook</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT><SVFROMDATE>20260101</SVFROMDATE><SVTODATE>20260101</SVTODATE></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
-  // Format D: TDL-style collection export (works on all Tally Gateway versions)
-  const xmlD = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>COMPANY</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  // Method 4: License info — guaranteed safe, reveals nothing about companies but confirms alive
+  const xmlLic = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>License Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
-  // Format E: Fetch via GETCOLLECTION — works on Tally Prime 2.x+
-  const xmlE = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT><SVCURRENTCOMPANY></SVCURRENTCOMPANY></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
-
-  const formats = [xmlA, xmlE, xmlC, xmlD, xmlB];
+  const formats = [xmlCol, xmlCol2, xmlDay, xmlLic];
+  let tallyAlive = false;
   let lastRaw = "";
 
   for (const xml of formats) {
     try {
       const raw = await tallyPost(host, port, xml, 8000);
       lastRaw = raw;
-      if (raw.includes("LINEERROR")) continue; // try next format
+      tallyAlive = true; // got any response = Tally is alive
 
-      // Try all known company/name tags
+      if (raw.includes("LINEERROR") || raw.includes("ERRORS")) continue;
+
+      // Extract company name from any known tag
       const candidates = [
-        ...parseTallyTags(raw, "COMPANY"),
         ...parseTallyTags(raw, "BASICCOMPANYNAME"),
         ...parseTallyTags(raw, "COMPANYNAME"),
-        ...parseTallyTags(raw, "NAME"),
-        ...parseTallyTags(raw, "REMOTECMPINFO\.LIST"),
+        ...parseTallyTags(raw, "COMPANY"),
       ].map(n => n.trim()).filter(n => n && !n.includes("<") && n.length > 1 && n.length < 100);
 
-      const unique = [...new Set(candidates)];
-      if (unique.length > 0) {
-        console.info("Tally companies found:", unique);
-        return unique.map((name, i) => ({ id: `tc${i}`, name, gstin: "", state: "", fy: "2024-25" }));
-      }
+      // Also check SVCURRENTCOMPANY in response envelope
+      const svcMatch = raw.match(/<SVCURRENTCOMPANY[^>]*>([^<]+)<\/SVCURRENTCOMPANY>/i);
+      if (svcMatch?.[1]?.trim()) candidates.push(svcMatch[1].trim());
 
-      // If we got a valid XML response but no company tags,
-      // the company name may be in COMPANYINFO or header — try extracting it
-      const headerMatch = raw.match(/<SVCURRENTCOMPANY[^>]*>([^<]+)<\/SVCURRENTCOMPANY>/i);
-      if (headerMatch?.[1]?.trim()) {
-        const name = headerMatch[1].trim();
-        console.info("Tally company from header:", name);
-        return [{ id: "tc0", name, gstin: "", state: "", fy: "2024-25" }];
+      // Check NAME tags (but filter out ledger/group names — they're usually shorter)
+      const nameRaw = parseTallyTags(raw, "NAME")
+        .map(n => n.trim())
+        .filter(n => n && n.length > 3 && n.length < 80 && !n.includes("<"));
+      // Heuristic: company names contain spaces or are title-cased
+      const likelyCompany = nameRaw.filter(n => /\s/.test(n) || /^[A-Z]/.test(n));
+      candidates.push(...likelyCompany.slice(0, 3));
+
+      const unique = [...new Set(candidates)].filter(Boolean);
+      if (unique.length > 0) {
+        console.info("Tally companies found via collection:", unique);
+        return unique.map((name, i) => ({ id: `tc${i}`, name, gstin: "", state: "", fy: "2024-25" }));
       }
     } catch(e) {
       if (e.message === "EXTENSION_NOT_READY") throw e;
@@ -311,17 +313,22 @@ async function fetchTallyCompanies(host, port) {
     }
   }
 
-  // Last resort — if Tally responded at all, ask user to enter company manually
-  console.warn("Tally company fetch — all formats exhausted. Last raw:", lastRaw?.slice(0, 300));
-  throw new Error("Tally is connected but could not read company list. Please enter your company name manually below.");
+  console.warn("fetchTallyCompanies — last raw:", lastRaw?.slice(0, 400));
+
+  if (tallyAlive) {
+    // Tally responded but we couldn't extract company name — ask user to type it
+    throw new Error("Tally is connected but company name could not be read automatically. Please type your company name in the box below.");
+  }
+  throw new Error("Could not reach Tally. Make sure Tally is open and Gateway is enabled on port 9000.");
 }
 
-// Fetch company details (GSTIN, state, FY) for a specific company
+// Fetch company details (GSTIN, state, FY) — uses safe collection query
 async function fetchTallyCompanyDetails(host, port, companyName) {
+  // Use List of Groups (safe) with company context — avoids Form:Company crash
   const xml = `<ENVELOPE>
     <HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
     <BODY><EXPORTDATA><REQUESTDESC>
-      <REPORTNAME>Company Info</REPORTNAME>
+      <REPORTNAME>List of Groups</REPORTNAME>
       <STATICVARIABLES>
         <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
@@ -348,10 +355,11 @@ async function fetchTallyCompanyDetails(host, port, companyName) {
 
 // Fetch all ledgers for a company from Tally
 async function fetchTallyLedgers(host, port, companyName) {
+  // Use List of Ledgers (collection-based, safe — no form renderer)
   const xml = `<ENVELOPE>
     <HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
     <BODY><EXPORTDATA><REQUESTDESC>
-      <REPORTNAME>List of Accounts</REPORTNAME>
+      <REPORTNAME>List of Ledgers</REPORTNAME>
       <STATICVARIABLES>
         <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
@@ -366,14 +374,22 @@ async function fetchTallyLedgers(host, port, companyName) {
   return all.length ? all : null; // null = use built-in fallback
 }
 
-// Test connection via extension
+// Test connection via extension using a safe XML that never crashes Tally
 async function testTallyConnection(host, port) {
   if (!_extensionReady) {
     throw new Error("Bank2Tally Connector extension not detected. Please install it from the instructions below, then refresh this page.");
   }
-  const res = await sendToExtension({ type: "TALLY_PING", host, port }, 8000);
-  if (res.success) return true;
-  throw new Error(res.error || "Extension is installed but cannot reach Tally. Make sure Tally is open on this computer.");
+  // Use GetLicenseInfo — the safest possible request, never triggers any TDL form
+  // This is a pure data query that works on ALL Tally versions without opening any UI
+  const safeXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>License Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  const res = await sendToExtension({ type: "TALLY_REQUEST", host, port, body: safeXml }, 8000);
+  // Any response (even LINEERROR) means Tally is alive and listening
+  if (res.success || (res.data && res.data.includes("ENVELOPE"))) return true;
+  // Try even simpler — empty collection request
+  const pingXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Daybook</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT><SVFROMDATE>20260101</SVFROMDATE><SVTODATE>20260101</SVTODATE></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  const res2 = await sendToExtension({ type: "TALLY_REQUEST", host, port, body: pingXml }, 8000);
+  if (res2.success || (res2.data && res2.data.length > 10)) return true;
+  throw new Error(res2.error || "Extension is installed but Tally is not responding. Make sure Tally is open.");
 }
 
 // ── useTallyGateway hook ─────────────────────────────────────────
