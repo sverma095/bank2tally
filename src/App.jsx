@@ -3037,22 +3037,30 @@ function UserManagementScreen({ adminUser }) {
   const [search, setSearch]         = useState("");
   const [filterRole, setFilterRole] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [actioning, setActioning]   = useState(null); // userId being acted on
+  const [actioning, setActioning]   = useState(null);
   const [toast_, setToast_]         = useState({ msg:"", type:"success" });
-  const [confirmDel, setConfirmDel] = useState(null); // user to confirm-delete
-  const [viewUser, setViewUser]     = useState(null); // user detail modal
-  const [resetModal, setResetModal] = useState(null); // user for pwd reset
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [viewUser, setViewUser]     = useState(null);
+  const [editUser, setEditUser]     = useState(null);   // ← NEW: edit modal
+  const [editForm, setEditForm]     = useState({});     // ← NEW: edit form state
+  const [editErr, setEditErr]       = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [resetModal, setResetModal] = useState(null);
   const [newPass, setNewPass]       = useState("");
   const [newPassErr, setNewPassErr] = useState("");
   const [addModal, setAddModal]     = useState(false);
   const [addForm, setAddForm]       = useState({ name:"", email:"", role:"user", company:"", password:"" });
   const [addErr, setAddErr]         = useState("");
   const [addLoading, setAddLoading] = useState(false);
-  const [tab, setTab] = useState("users"); // users | approvals
+  const [tab, setTab] = useState("users");
+
+  const ROLES = ["user","Accountant","CA","admin"];
+  const statusColor = s => s==="approved"?"green":s==="pending"?"amber":s==="on_hold"?"purple":s==="rejected"?"red":"gray";
+  const roleColor   = r => r==="admin"?"red":r==="CA"?"purple":r==="Accountant"?"blue":"gray";
 
   const notify = (msg, type="success") => {
     setToast_({ msg, type });
-    setTimeout(() => setToast_(t => t.msg === msg ? { msg:"", type:"success" } : t), 3500);
+    setTimeout(() => setToast_(t => t.msg===msg?{msg:"",type:"success"}:t), 3500);
   };
 
   // ── Load all profiles ──────────────────────────────────────────
@@ -3060,89 +3068,113 @@ function UserManagementScreen({ adminUser }) {
     setLoading(true);
     try {
       const profiles = await sb.from("profiles", "select=*&order=created_at.asc");
-
-      // Try to fetch auth user list for emails (requires admin JWT — best effort)
+      // Try to get emails from auth admin endpoint (best-effort)
       let authEmailMap = {};
       try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1000`, {
-          headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${sb._token || SUPABASE_ANON}` }
+          headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${sb._token||SUPABASE_ANON}` }
         });
-        if (res.ok) {
-          const d = await res.json();
-          const list = d.users || d || [];
-          list.forEach(u => { if (u.id && u.email) authEmailMap[u.id] = u.email; });
-        }
+        if (res.ok) { const d=await res.json(); (d.users||d||[]).forEach(u=>{ if(u.id&&u.email) authEmailMap[u.id]=u.email; }); }
       } catch {}
-
       setUsers(profiles.map(p => ({
         ...p,
-        email: p.email || authEmailMap[p.id] || "",
-        avatar: p.avatar || (p.name || "?").slice(0,2).toUpperCase(),
-        // Sanitize company: if it's a pure number it's likely a DB artifact
-        company: (p.company && isNaN(String(p.company).trim())) ? p.company : (p.company ? "" : ""),
+        email:   p.email || authEmailMap[p.id] || "",
+        avatar:  p.avatar || (p.name||"?").slice(0,2).toUpperCase(),
+        company: (p.company && isNaN(String(p.company).trim())) ? p.company : "",
       })));
-    } catch (e) {
-      notify("Error loading users: " + e.message, "error");
-    }
+    } catch (e) { notify("Error loading users: "+e.message, "error"); }
     setLoading(false);
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
+  // ── Helper: patch a user locally + in viewUser/editUser if open ─
+  const patchUser = (id, changes) => {
+    setUsers(us => us.map(x => x.id===id ? {...x,...changes} : x));
+    setViewUser(v => v && v.id===id ? {...v,...changes} : v);
+    setEditUser(v => v && v.id===id ? {...v,...changes} : v);
+  };
+
   // ── Hold / Unhold ──────────────────────────────────────────────
   const toggleHold = async (u) => {
-    const newStatus = u.status === "on_hold" ? "approved" : "on_hold";
+    const newStatus = u.status==="on_hold" ? "approved" : "on_hold";
     setActioning(u.id);
     try {
-      await sb.update("profiles", { id: u.id }, { status: newStatus });
-      setUsers(us => us.map(x => x.id === u.id ? { ...x, status: newStatus } : x));
-      notify(`${u.name} ${newStatus === "on_hold" ? "put on hold" : "reactivated"}`);
-    } catch (e) { notify("Error: " + e.message, "error"); }
+      await sb.update("profiles", { id: u.id }, { status: newStatus, updated_at: new Date().toISOString() });
+      patchUser(u.id, { status: newStatus });
+      notify(`${u.name} ${newStatus==="on_hold"?"put on hold":"reactivated"}`);
+    } catch (e) { notify("Hold error: "+e.message, "error"); }
     setActioning(null);
   };
 
   // ── Change Role ────────────────────────────────────────────────
   const changeRole = async (u, role) => {
+    if (role === u.role) return;
     setActioning(u.id);
     try {
-      await sb.update("profiles", { id: u.id }, { role });
-      setUsers(us => us.map(x => x.id === u.id ? { ...x, role } : x));
+      await sb.update("profiles", { id: u.id }, { role, updated_at: new Date().toISOString() });
+      patchUser(u.id, { role });
       notify(`${u.name}'s role changed to ${role}`);
-    } catch (e) { notify("Error: " + e.message, "error"); }
+    } catch (e) { notify("Role change error: "+e.message, "error"); }
     setActioning(null);
+  };
+
+  // ── Edit / Save Profile ────────────────────────────────────────
+  const openEditUser = (u) => {
+    setEditUser(u);
+    setEditForm({ name: u.name||"", company: u.company||"", role: u.role||"user", status: u.status||"approved" });
+    setEditErr("");
+  };
+
+  const saveEditUser = async () => {
+    if (!editForm.name.trim()) return setEditErr("Name is required.");
+    setEditLoading(true); setEditErr("");
+    try {
+      const payload = {
+        name:       editForm.name.trim(),
+        company:    editForm.company.trim(),
+        role:       editForm.role,
+        status:     editForm.status,
+        avatar:     editForm.name.trim().slice(0,2).toUpperCase(),
+        updated_at: new Date().toISOString(),
+      };
+      await sb.update("profiles", { id: editUser.id }, payload);
+      patchUser(editUser.id, payload);
+      notify(`${editForm.name} profile updated`);
+      setEditUser(null);
+    } catch (e) { setEditErr("Save failed: "+e.message); }
+    setEditLoading(false);
   };
 
   // ── Delete ─────────────────────────────────────────────────────
   const deleteUser = async (u) => {
     setActioning(u.id);
     try {
-      // Delete profile row (Supabase auth user must be deleted via service-role key in production)
-      const q = `id=eq.${u.id}`;
-      await fetch(`${SUPABASE_URL}/rest/v1/profiles?${q}`, {
+      await sb.update("profiles", { id: u.id }, { status: "deleted", updated_at: new Date().toISOString() });
+      // Hard delete profile row
+      const q = `id=eq.${encodeURIComponent(u.id)}`;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?${q}`, {
         method: "DELETE",
-        headers: { ...sb._headers(), "Prefer": "return=representation" },
+        headers: { ...sb._headers(), "Prefer": "return=minimal" },
       });
-      setUsers(us => us.filter(x => x.id !== u.id));
+      if (!res.ok && res.status !== 204) throw new Error(`Delete failed (${res.status})`);
+      setUsers(us => us.filter(x => x.id!==u.id));
       notify(`${u.name} deleted`);
-    } catch (e) { notify("Error: " + e.message, "error"); }
+    } catch (e) { notify("Delete error: "+e.message, "error"); }
     setActioning(null);
     setConfirmDel(null);
   };
 
-  // ── Admin Reset Password ───────────────────────────────────────
+  // ── Reset Password ─────────────────────────────────────────────
   const sendPasswordReset = async (u) => {
     setNewPassErr("");
     try {
-      // Trigger Supabase password-reset email (works without service key)
       const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
         method: "POST",
         headers: { "Content-Type":"application/json", "apikey": SUPABASE_ANON },
         body: JSON.stringify({ email: u.email }),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error_description || d.message || "Failed");
-      }
+      if (!res.ok) { const d=await res.json(); throw new Error(d.error_description||d.message||"Failed"); }
       notify(`Password reset email sent to ${u.email}`);
       setResetModal(null);
     } catch (e) { setNewPassErr(e.message); }
@@ -3151,24 +3183,25 @@ function UserManagementScreen({ adminUser }) {
   // ── Add User ───────────────────────────────────────────────────
   const handleAddUser = async () => {
     setAddErr("");
-    if (!addForm.name.trim())          return setAddErr("Name is required.");
-    if (!addForm.email.includes("@"))  return setAddErr("Valid email required.");
-    if (addForm.password.length < 8)   return setAddErr("Password must be at least 8 characters.");
+    if (!addForm.name.trim())         return setAddErr("Name is required.");
+    if (!addForm.email.includes("@")) return setAddErr("Valid email required.");
+    if (addForm.password.length < 8)  return setAddErr("Password must be at least 8 characters.");
     setAddLoading(true);
     try {
       const session = await sb.signUp(addForm.email, addForm.password, {
-        name: addForm.name.trim(),
-        role: addForm.role,
-        company: addForm.company.trim(),
+        name: addForm.name.trim(), role: addForm.role, company: addForm.company.trim(),
       });
-      // Insert profile with approved status (admin-created accounts skip approval)
+      const userId = session.user?.id;
+      if (!userId) throw new Error("User created but no ID returned — check Supabase email confirmation settings.");
+      // Upsert profile — include email so it's stored
       await sb.insert("profiles", {
-        id: session.user?.id,
-        name: addForm.name.trim(),
-        role: addForm.role,
+        id:      userId,
+        name:    addForm.name.trim(),
+        email:   addForm.email.trim().toLowerCase(),   // ← FIX: store email in profiles
+        role:    addForm.role,
         company: addForm.company.trim(),
-        status: "approved",
-        avatar: addForm.name.trim().slice(0,2).toUpperCase(),
+        status:  "approved",
+        avatar:  addForm.name.trim().slice(0,2).toUpperCase(),
       });
       notify(`User ${addForm.name} created successfully`);
       setAddModal(false);
@@ -3178,28 +3211,14 @@ function UserManagementScreen({ adminUser }) {
     setAddLoading(false);
   };
 
-  // ── Login visibility (view as user) ───────────────────────────
-  const loginAsUser = (u) => {
-    // Opens a special read-only view — in production this would use a service-role impersonation token.
-    // Here we show the user's profile details in a modal as "view-as".
-    setViewUser(u);
-  };
-
   // ── Filters ────────────────────────────────────────────────────
   const filtered = users.filter(u => {
-    const matchSearch = !search ||
-      u.name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email?.toLowerCase().includes(search.toLowerCase()) ||
-      u.company?.toLowerCase().includes(search.toLowerCase());
-    const matchRole   = filterRole   === "all" || u.role   === filterRole;
-    const matchStatus = filterStatus === "all" || u.status === filterStatus;
+    const q = search.toLowerCase();
+    const matchSearch = !search || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.company?.toLowerCase().includes(q);
+    const matchRole   = filterRole==="all"   || u.role===filterRole;
+    const matchStatus = filterStatus==="all" || u.status===filterStatus;
     return matchSearch && matchRole && matchStatus;
   });
-
-  const statusColor = s => s === "approved" ? "green" : s === "pending" ? "amber" : s === "on_hold" ? "purple" : s === "rejected" ? "red" : "gray";
-  const roleColor   = r => r === "admin" ? "red" : r === "CA" ? "purple" : r === "Accountant" ? "blue" : "gray";
-
-  const ROLES = ["user","Accountant","CA","admin"];
 
   return (
     <div className="fade-in">
@@ -3217,31 +3236,29 @@ function UserManagementScreen({ adminUser }) {
           <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#eef2ff 50%,#3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>User Management</h2>
           <p style={{ color:T.textMid, fontSize:13, marginTop:3 }}>Admin-only panel · full user control</p>
         </div>
-        {tab === "users" && <Btn icon="+" onClick={() => setAddModal(true)}>Add User</Btn>}
+        {tab==="users" && <Btn icon="+" onClick={()=>setAddModal(true)}>Add User</Btn>}
       </div>
 
       {/* Tabs */}
       <div style={{ display:"flex", background:T.surface, borderRadius:11, padding:4, marginBottom:20, border:`1px solid ${T.border}`, width:"fit-content", gap:2 }}>
         {[["users","👥 Users"],["approvals","⏳ Approvals"]].map(([t,label]) => (
           <button key={t} onClick={()=>setTab(t)}
-            style={{ padding:"7px 18px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:T.font, fontSize:13, fontWeight:tab===t?600:400, transition:"all 0.2s",
-              background:tab===t?T.accent:"transparent", color:tab===t?"#fff":T.textMid,
-              boxShadow:tab===t?`0 0 16px ${T.accentGlow}`:"none" }}>
+            style={{ padding:"7px 18px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:T.font, fontSize:13, fontWeight:tab===t?600:400, transition:"all 0.2s", background:tab===t?T.accent:"transparent", color:tab===t?"#fff":T.textMid, boxShadow:tab===t?`0 0 16px ${T.accentGlow}`:"none" }}>
             {label}
           </button>
         ))}
       </div>
 
-      {tab === "approvals" && <AdminApprovalPanel user={adminUser} onClose={()=>{}} />}
-      {tab === "users" && (
+      {tab==="approvals" && <AdminApprovalPanel user={adminUser} onClose={()=>{}} />}
+      {tab==="users" && (
       <div>
       {/* Stats row */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
         {[
-          ["👥","Total Users",    users.length,                                           T.accent],
-          ["✅","Active",         users.filter(u=>u.status==="approved").length,           T.green],
-          ["⏳","Pending",        users.filter(u=>u.status==="pending").length,            T.amber],
-          ["🔒","On Hold",        users.filter(u=>u.status==="on_hold").length,            T.purple],
+          ["👥","Total Users",  users.length,                                        T.accent],
+          ["✅","Active",       users.filter(u=>u.status==="approved").length,        T.green],
+          ["⏳","Pending",      users.filter(u=>u.status==="pending").length,         T.amber],
+          ["🔒","On Hold",      users.filter(u=>u.status==="on_hold").length,         T.purple],
         ].map(([icon,label,val,color]) => (
           <Card key={label} style={{ padding:"14px 18px" }}>
             <div style={{ fontSize:20, marginBottom:4 }}>{icon}</div>
@@ -3257,11 +3274,11 @@ function UserManagementScreen({ adminUser }) {
           <div style={{ flex:1, minWidth:200 }}>
             <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, company…" prefix="🔍" />
           </div>
-          <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ padding:"8px 12px", borderRadius:8, fontSize:12, minWidth:120 }}>
+          <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ padding:"8px 12px", borderRadius:8, fontSize:12, border:`1px solid ${T.border}`, background:T.surface, color:T.text, minWidth:120 }}>
             <option value="all">All Roles</option>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ padding:"8px 12px", borderRadius:8, fontSize:12, minWidth:130 }}>
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ padding:"8px 12px", borderRadius:8, fontSize:12, border:`1px solid ${T.border}`, background:T.surface, color:T.text, minWidth:130 }}>
             <option value="all">All Statuses</option>
             {["approved","pending","on_hold","rejected"].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -3273,91 +3290,76 @@ function UserManagementScreen({ adminUser }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         {loading ? (
           <div style={{ textAlign:"center", padding:"60px 0", color:T.textDim }}>
-            <span style={{ fontSize:28, animation:"pulse 1.5s infinite" }}>⏳</span>
+            <span style={{ fontSize:28 }}>⏳</span>
             <p style={{ marginTop:12, fontSize:13 }}>Loading users…</p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filtered.length===0 ? (
           <div style={{ textAlign:"center", padding:"60px 0", color:T.textDim }}>
             <div style={{ fontSize:36, marginBottom:10 }}>🔍</div>
             <p style={{ fontSize:14 }}>No users match your filters</p>
           </div>
         ) : (
           <>
-            {/* Table header */}
-            <div style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 1.8fr", gap:0, padding:"10px 20px", borderBottom:`1px solid ${T.border}`, background:T.surface }}>
+            <div style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 2fr", gap:0, padding:"10px 20px", borderBottom:`1px solid ${T.border}`, background:T.surface }}>
               {["User","Company","Role","Status","Actions"].map(h => (
                 <span key={h} style={{ fontSize:11, fontWeight:600, color:T.textDim, textTransform:"uppercase", letterSpacing:"0.06em" }}>{h}</span>
               ))}
             </div>
             {filtered.map((u, idx) => (
-              <div key={u.id} className="row-hover" style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 1.8fr", gap:0, padding:"13px 20px", borderBottom: idx < filtered.length-1 ? `1px solid ${T.border}` : "none", alignItems:"center", transition:"background 0.15s" }}>
+              <div key={u.id} className="row-hover" style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 2fr", gap:0, padding:"13px 20px", borderBottom:idx<filtered.length-1?`1px solid ${T.border}`:"none", alignItems:"center", transition:"background 0.15s" }}>
                 {/* User */}
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <div style={{ width:36, height:36, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#fff", flexShrink:0 }}>
-                    {(u.avatar || (u.name||"?").slice(0,2)).toUpperCase()}
+                    {(u.avatar||(u.name||"?").slice(0,2)).toUpperCase()}
                   </div>
                   <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.name || "—"}</div>
-                    <div style={{ fontSize:11, color:T.textDim, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email || "—"}</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.name||"—"}</div>
+                    <div style={{ fontSize:11, color:T.textDim, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email||"—"}</div>
                   </div>
                 </div>
                 {/* Company */}
-                <div style={{ fontSize:12, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.company || <span style={{color:T.textDim}}>—</span>}</div>
+                <div style={{ fontSize:12, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.company||<span style={{color:T.textDim}}>—</span>}</div>
                 {/* Role */}
-                <div>
-                  <Pill color={roleColor(u.role)} size="xs">{u.role || "user"}</Pill>
-                </div>
+                <div><Pill color={roleColor(u.role)} size="xs">{u.role||"user"}</Pill></div>
                 {/* Status */}
-                <div>
-                  <Pill color={statusColor(u.status)} size="xs" dot>{u.status || "unknown"}</Pill>
-                </div>
+                <div><Pill color={statusColor(u.status)} size="xs" dot>{u.status||"unknown"}</Pill></div>
                 {/* Actions */}
                 <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                   {/* View */}
                   <button title="View Profile" disabled={actioning===u.id}
-                    onClick={async () => {
-                      // Resolve approved_by UUID → name using already-loaded users list
-                      const approvedByName = u.approved_by
-                        ? (users.find(x => x.id === u.approved_by)?.name || u.approved_by)
-                        : "—";
-                      // Fetch email from Supabase auth (admin users endpoint)
-                      let email = u.email || "";
-                      if (!email) {
-                        try {
-                          const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${u.id}`, {
-                            headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${sb._token || SUPABASE_ANON}` }
-                          });
-                          if (res.ok) { const d = await res.json(); email = d.email || ""; }
-                        } catch {}
-                      }
-                      setViewUser({ ...u, email, approvedByName });
-                    }}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.border}`, background:T.surface, color:T.textMid, transition:"all 0.15s" }}>
+                    onClick={() => setViewUser(u)}
+                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.border}`, background:T.surface, color:T.textMid }}>
                     👁
                   </button>
+                  {/* Edit */}
+                  <button title="Edit Profile" disabled={actioning===u.id || u.id===adminUser.id}
+                    onClick={() => openEditUser(u)}
+                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${T.accent}44`, background:T.accentDim, color:T.accent, opacity:u.id===adminUser.id?0.45:1 }}>
+                    ✏
+                  </button>
                   {/* Hold / Unhold */}
-                  <button title={u.status==="on_hold"?"Unhold":"Put on Hold"} disabled={actioning===u.id || u.id===adminUser.id}
+                  <button title={u.status==="on_hold"?"Unhold":"Put on Hold"} disabled={actioning===u.id||u.id===adminUser.id}
                     onClick={() => toggleHold(u)}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor: (actioning===u.id||u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${u.status==="on_hold"?T.green+"66":T.purple+"66"}`, background:u.status==="on_hold"?T.greenDim:T.purpleDim, color:u.status==="on_hold"?T.green:T.purple, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1, transition:"all 0.15s" }}>
-                    {u.status==="on_hold" ? "▶" : "⏸"}
+                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(actioning===u.id||u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${u.status==="on_hold"?T.green+"66":T.purple+"66"}`, background:u.status==="on_hold"?T.greenDim:T.purpleDim, color:u.status==="on_hold"?T.green:T.purple, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1 }}>
+                    {actioning===u.id ? "…" : u.status==="on_hold" ? "▶" : "⏸"}
                   </button>
                   {/* Reset Password */}
                   <button title="Reset Password" disabled={actioning===u.id}
-                    onClick={() => { setResetModal(u); setNewPassErr(""); }}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:actioning===u.id?"not-allowed":"pointer", border:`1px solid ${T.accent}44`, background:T.accentDim, color:T.accent, opacity:actioning===u.id?0.45:1, transition:"all 0.15s" }}>
+                    onClick={() => { setResetModal(u); setNewPassErr(""); setNewPass(""); }}
+                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.amber}44`, background:T.amberDim||T.accentDim, color:T.amber||T.accent }}>
                     🔑
                   </button>
-                  {/* Change Role */}
-                  <select title="Change Role" disabled={actioning===u.id || u.id===adminUser.id}
-                    value={u.role || "user"}
+                  {/* Change Role inline */}
+                  <select title="Change Role" disabled={actioning===u.id||u.id===adminUser.id}
+                    value={u.role||"user"}
                     onChange={e => changeRole(u, e.target.value)}
-                    style={{ padding:"4px 7px", borderRadius:7, fontSize:11, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.border}`, background:T.surface, color:T.textMid, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1 }}>
+                    style={{ padding:"4px 6px", borderRadius:7, fontSize:11, fontFamily:T.font, border:`1px solid ${T.border}`, background:T.surface, color:T.textMid, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1, cursor:"pointer" }}>
                     {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                   {/* Delete */}
-                  <button title="Delete User" disabled={actioning===u.id || u.id===adminUser.id}
+                  <button title="Delete User" disabled={actioning===u.id||u.id===adminUser.id}
                     onClick={() => setConfirmDel(u)}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(actioning===u.id||u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${T.red}44`, background:T.redDim, color:T.red, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1, transition:"all 0.15s" }}>
+                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(actioning===u.id||u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${T.red}44`, background:T.redDim, color:T.red, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1 }}>
                     🗑
                   </button>
                 </div>
@@ -3368,47 +3370,52 @@ function UserManagementScreen({ adminUser }) {
       </Card>
       </div>)}
 
-      {/* ── Delete confirm modal ────────────────────────────────── */}
+      {/* ── Delete confirm ──────────────────────────────────────── */}
       <Modal open={!!confirmDel} onClose={() => setConfirmDel(null)} title="⚠ Confirm Delete" width={420}>
         {confirmDel && (
           <div>
             <div style={{ background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:10, padding:"14px 16px", marginBottom:18 }}>
               <p style={{ fontSize:13, color:T.textMid, lineHeight:1.7 }}>
                 You are about to <strong style={{color:T.red}}>permanently delete</strong> the account for:<br/>
-                <strong style={{color:T.text}}>{confirmDel.name}</strong> ({confirmDel.email})<br/>
-                This action cannot be undone.
+                <strong style={{color:T.text}}>{confirmDel.name}</strong> ({confirmDel.email||confirmDel.id})<br/>
+                This cannot be undone.
               </p>
             </div>
             <div style={{ display:"flex", gap:10 }}>
               <Btn variant="secondary" fullWidth onClick={() => setConfirmDel(null)}>Cancel</Btn>
-              <Btn variant="danger" fullWidth icon="🗑" onClick={() => deleteUser(confirmDel)}>Delete Permanently</Btn>
+              <Btn variant="danger" fullWidth icon="🗑" onClick={() => deleteUser(confirmDel)} disabled={actioning===confirmDel.id}>
+                {actioning===confirmDel.id ? "Deleting…" : "Delete Permanently"}
+              </Btn>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* ── Reset Password modal ────────────────────────────────── */}
+      {/* ── Reset Password ──────────────────────────────────────── */}
       <Modal open={!!resetModal} onClose={() => setResetModal(null)} title="🔑 Reset Password" width={420}>
         {resetModal && (
           <div>
             <div style={{ background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
               <p style={{ fontSize:12, color:T.textMid, lineHeight:1.7 }}>
-                Send a password-reset email to <strong style={{color:T.text}}>{resetModal.name}</strong> ({resetModal.email}).<br/>
-                They will receive a secure link to set a new password.
+                Send a password-reset link to <strong style={{color:T.text}}>{resetModal.name}</strong><br/>
+                <span style={{color:T.textDim}}>{resetModal.email||"(no email on file)"}</span>
               </p>
             </div>
-            {newPassErr && (
-              <div style={{ background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.red, marginBottom:12 }}>✕ {newPassErr}</div>
+            {!resetModal.email && (
+              <div style={{ background:T.amberDim||T.accentDim, border:`1px solid ${T.amber||T.accent}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.amber||T.accent, marginBottom:12 }}>
+                ⚠ No email address found for this user. Reset email cannot be sent.
+              </div>
             )}
+            {newPassErr && <div style={{ background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.red, marginBottom:12 }}>✕ {newPassErr}</div>}
             <div style={{ display:"flex", gap:10 }}>
               <Btn variant="secondary" fullWidth onClick={() => setResetModal(null)}>Cancel</Btn>
-              <Btn variant="primary" fullWidth icon="📧" onClick={() => sendPasswordReset(resetModal)}>Send Reset Email</Btn>
+              <Btn variant="primary" fullWidth icon="📧" onClick={() => sendPasswordReset(resetModal)} disabled={!resetModal.email}>Send Reset Email</Btn>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* ── View User modal ─────────────────────────────────────── */}
+      {/* ── View User Profile ────────────────────────────────────── */}
       <Modal open={!!viewUser} onClose={() => setViewUser(null)} title="👤 User Profile" width={480}>
         {viewUser && (
           <div>
@@ -3418,41 +3425,80 @@ function UserManagementScreen({ adminUser }) {
               </div>
               <div>
                 <div style={{ fontSize:17, fontWeight:700, color:T.text, marginBottom:4 }}>{viewUser.name}</div>
-                <div style={{ fontSize:12, color:T.textDim, marginBottom:6 }}>{viewUser.email || <span style={{color:T.textDim,fontStyle:"italic"}}>loading email…</span>}</div>
+                <div style={{ fontSize:12, color:T.textDim, marginBottom:6 }}>{viewUser.email||<span style={{fontStyle:"italic"}}>no email on file</span>}</div>
                 <div style={{ display:"flex", gap:6 }}>
                   <Pill color={roleColor(viewUser.role)} size="xs">{viewUser.role||"user"}</Pill>
-                  <Pill color={statusColor(viewUser.status)} size="xs" dot>{viewUser.status}</Pill>
+                  <Pill color={statusColor(viewUser.status)} size="xs" dot>{viewUser.status||"unknown"}</Pill>
                 </div>
               </div>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:8, fontSize:13 }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, fontSize:13, marginBottom:16 }}>
               {[
-                ["🏢","Company",   (viewUser.company && isNaN(viewUser.company)) ? viewUser.company : (viewUser.company ? `ID: ${viewUser.company}` : "—")],
-                ["✉","Email",     viewUser.email || "—"],
-                ["🪪","User ID",   viewUser.id],
-                ["📅","Joined",    viewUser.created_at ? new Date(viewUser.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"],
-                ["✅","Approved By", viewUser.approvedByName || viewUser.approved_by || "—"],
-                ["🕒","Approved At", viewUser.approved_at ? new Date(viewUser.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"],
-              ].map(([icon, label, val]) => (
+                ["🏢","Company",    viewUser.company||"—"],
+                ["✉","Email",      viewUser.email||"—"],
+                ["🪪","User ID",    viewUser.id],
+                ["📅","Joined",     viewUser.created_at ? new Date(viewUser.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"],
+                ["✅","Approved By",users.find(x=>x.id===viewUser.approved_by)?.name || viewUser.approved_by || "—"],
+                ["🕒","Approved At",viewUser.approved_at ? new Date(viewUser.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"],
+              ].map(([icon,label,val]) => (
                 <div key={label} style={{ display:"flex", justifyContent:"space-between", padding:"8px 12px", background:T.surface, borderRadius:8 }}>
                   <span style={{ color:T.textDim }}>{icon} {label}</span>
-                  <span style={{ color:T.text, fontWeight:500, wordBreak:"break-all", maxWidth:220, textAlign:"right" }}>{val}</span>
+                  <span style={{ color:T.text, fontWeight:500, wordBreak:"break-all", maxWidth:250, textAlign:"right" }}>{val}</span>
                 </div>
               ))}
             </div>
-            <div style={{ display:"flex", gap:8, marginTop:16 }}>
+            <div style={{ display:"flex", gap:8 }}>
               <Btn variant="secondary" fullWidth onClick={() => setViewUser(null)}>Close</Btn>
-              <Btn variant="outline" fullWidth icon="🔑" onClick={() => { setViewUser(null); setResetModal(viewUser); setNewPassErr(""); }}>Reset Password</Btn>
-              {viewUser.status === "on_hold"
-                ? <Btn variant="success" fullWidth icon="▶" onClick={() => { toggleHold(viewUser); setViewUser(null); }}>Reactivate</Btn>
-                : <Btn variant="amber" fullWidth icon="⏸" onClick={() => { toggleHold(viewUser); setViewUser(null); }}>Put on Hold</Btn>
-              }
+              <Btn variant="outline" fullWidth icon="✏" onClick={() => { setViewUser(null); openEditUser(viewUser); }}>Edit</Btn>
+              <Btn variant="outline" fullWidth icon="🔑" onClick={() => { setViewUser(null); setResetModal(viewUser); setNewPassErr(""); }}>Reset Pwd</Btn>
+              {viewUser.id !== adminUser.id && (
+                viewUser.status==="on_hold"
+                  ? <Btn variant="success" fullWidth icon="▶" onClick={() => { toggleHold(viewUser); setViewUser(null); }}>Reactivate</Btn>
+                  : <Btn variant="amber" fullWidth icon="⏸" onClick={() => { toggleHold(viewUser); setViewUser(null); }}>Hold</Btn>
+              )}
             </div>
           </div>
         )}
       </Modal>
 
-      {/* ── Add User modal ──────────────────────────────────────── */}
+      {/* ── Edit User Profile ────────────────────────────────────── */}
+      <Modal open={!!editUser} onClose={() => setEditUser(null)} title="✏ Edit User Profile" width={480}>
+        {editUser && (
+          <div style={{ display:"flex", flexDirection:"column", gap:13 }}>
+            {editErr && <div style={{ background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.red }}>✕ {editErr}</div>}
+            <div>
+              <label style={{ fontSize:12, color:T.textDim, display:"block", marginBottom:5 }}>Full Name *</label>
+              <Input value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} placeholder="e.g. Priya Sharma" prefix="👤" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.textDim, display:"block", marginBottom:5 }}>Company</label>
+              <Input value={editForm.company} onChange={e=>setEditForm(f=>({...f,company:e.target.value}))} placeholder="e.g. Acme Corp Pvt Ltd" prefix="🏢" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.textDim, display:"block", marginBottom:5 }}>Role</label>
+              <select value={editForm.role} onChange={e=>setEditForm(f=>({...f,role:e.target.value}))}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:8, fontSize:13, border:`1px solid ${T.border}`, background:T.surface, color:T.text }}>
+                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.textDim, display:"block", marginBottom:5 }}>Status</label>
+              <select value={editForm.status} onChange={e=>setEditForm(f=>({...f,status:e.target.value}))}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:8, fontSize:13, border:`1px solid ${T.border}`, background:T.surface, color:T.text }}>
+                {["approved","pending","on_hold","rejected"].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div style={{ display:"flex", gap:10, marginTop:4 }}>
+              <Btn variant="secondary" fullWidth onClick={() => setEditUser(null)}>Cancel</Btn>
+              <Btn variant="primary" fullWidth icon="💾" onClick={saveEditUser} disabled={editLoading}>
+                {editLoading ? "Saving…" : "Save Changes"}
+              </Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Add User ────────────────────────────────────────────── */}
       <Modal open={addModal} onClose={() => { setAddModal(false); setAddErr(""); }} title="➕ Add New User" width={480}>
         <div style={{ display:"flex", flexDirection:"column", gap:13 }}>
           {addErr && (
@@ -3472,8 +3518,9 @@ function UserManagementScreen({ adminUser }) {
           </div>
           <div>
             <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Role</label>
-            <select value={addForm.role} onChange={e=>setAddForm(f=>({...f,role:e.target.value}))} style={{ width:"100%", padding:"8px 10px" }}>
-              {["user","Accountant","CA","admin"].map(r=><option key={r} value={r}>{r}</option>)}
+            <select value={addForm.role} onChange={e=>setAddForm(f=>({...f,role:e.target.value}))}
+              style={{ width:"100%", padding:"9px 12px", borderRadius:8, fontSize:13, border:`1px solid ${T.border}`, background:T.surface, color:T.text }}>
+              {ROLES.map(r=><option key={r} value={r}>{r}</option>)}
             </select>
           </div>
           <div>
