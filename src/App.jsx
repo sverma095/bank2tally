@@ -366,12 +366,21 @@ async function fetchTallyLedgers(host, port, companyName) {
   return all.length ? all : null; // null = use built-in fallback
 }
 
-// Test connection via extension
+// Test connection — sends a minimal safe XML request directly (no TDL, no Form definitions)
+// Previously used TALLY_PING which caused the extension to send a broken TDL Form:Company
+// request to Tally, crashing it with "No PARTS" error. Now we send our own safe XML.
 async function testTallyConnection(host, port) {
   if (!_extensionReady) {
     throw new Error("Bank2Tally Connector extension not detected. Please install it from the instructions below, then refresh this page.");
   }
-  const res = await sendToExtension({ type: "TALLY_PING", host, port }, 8000);
+  // Use the safest possible Tally XML — just ask for the license info.
+  // This is a pure Export Data request with no TDL Form/Parts and never crashes Tally.
+  const safeXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  const res = await sendToExtension({
+    type: "TALLY_REQUEST",   // use REQUEST not PING — extension sends our XML, not its own
+    host, port,
+    body: safeXml,
+  }, 8000);
   if (res.success) return true;
   throw new Error(res.error || "Extension is installed but cannot reach Tally. Make sure Tally is open on this computer.");
 }
