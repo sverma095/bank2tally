@@ -41,6 +41,25 @@ const sb = {
     }
     if (!res.ok) throw new Error(data.error_description || data.msg || data.message || "Invalid email or password.");
     sb._token = data.access_token;
+    sb._refreshToken = data.refresh_token || null;
+    try { localStorage.setItem("sb_session", JSON.stringify(data)); } catch {}
+    return data;
+  },
+
+  // Auth: refresh expired token using refresh_token
+  async refreshSession() {
+    const stored = (() => { try { return JSON.parse(localStorage.getItem("sb_session")||"{}"); } catch { return {}; } })();
+    const rt = stored.refresh_token;
+    if (!rt) throw new Error("No refresh token available");
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || "Session expired — please sign in again.");
+    sb._token = data.access_token;
+    sb._refreshToken = data.refresh_token || rt;
     try { localStorage.setItem("sb_session", JSON.stringify(data)); } catch {}
     return data;
   },
@@ -63,7 +82,9 @@ const sb = {
       throw new Error("Network error — check your internet connection and try again.");
     }
     if (!res.ok) throw new Error(data.error_description || data.msg || data.message || "Signup failed.");
-    sb._token = data.access_token;
+    // Do NOT overwrite sb._token here — if an admin is adding a user, we must preserve
+    // the admin's own session token. Only set token for self-registration flows.
+    // Callers that need the new user's token should use data.access_token directly.
     return data;
   },
 
@@ -77,39 +98,45 @@ const sb = {
     sb._token = null;
   },
 
+  // DB: auto-retry helper — refreshes token on 401 and retries once
+  async _fetch(url, opts) {
+    let res = await fetch(url, opts);
+    if (res.status === 401) {
+      try {
+        await sb.refreshSession();
+        opts.headers = { ...opts.headers, "Authorization": `Bearer ${sb._token}` };
+        res = await fetch(url, opts);
+      } catch { throw new Error("Session expired — please sign in again."); }
+    }
+    const data = res.status === 204 ? {} : await res.json();
+    if (!res.ok) throw new Error(data.message || data.error_description || JSON.stringify(data));
+    return data;
+  },
+
   // DB: generic select
   async from(table, query = "") {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query ? "?" + query : ""}`, {
+    return sb._fetch(`${SUPABASE_URL}/rest/v1/${table}${query ? "?" + query : ""}`, {
       headers: { ...sb._headers(), "Prefer": "return=representation" },
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || JSON.stringify(data));
-    return data;
   },
 
   // DB: update
   async update(table, match, payload) {
     const q = Object.entries(match).map(([k,v]) => `${k}=eq.${encodeURIComponent(v)}`).join("&");
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
+    return sb._fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
       method: "PATCH",
       headers: { ...sb._headers(), "Prefer": "return=representation" },
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || JSON.stringify(data));
-    return data;
   },
 
   // DB: insert
   async insert(table, payload) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    return sb._fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
       method: "POST",
       headers: { ...sb._headers(), "Prefer": "return=representation" },
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || JSON.stringify(data));
-    return data;
   },
 };
 
@@ -293,7 +320,7 @@ async function fetchTallyCompanies(host, port) {
 
       const unique = [...new Set(candidates)];
       if (unique.length > 0) {
-        console.info("Tally companies found:", unique);
+        // console.info("Tally companies found:", unique); // debug only
         return unique.map((name, i) => ({ id: `tc${i}`, name, gstin: "", state: "", fy: "2024-25" }));
       }
 
@@ -302,7 +329,7 @@ async function fetchTallyCompanies(host, port) {
       const headerMatch = raw.match(/<SVCURRENTCOMPANY[^>]*>([^<]+)<\/SVCURRENTCOMPANY>/i);
       if (headerMatch?.[1]?.trim()) {
         const name = headerMatch[1].trim();
-        console.info("Tally company from header:", name);
+        // debug: company from header
         return [{ id: "tc0", name, gstin: "", state: "", fy: "2024-25" }];
       }
     } catch(e) {
@@ -312,7 +339,7 @@ async function fetchTallyCompanies(host, port) {
   }
 
   // Last resort — if Tally responded at all, ask user to enter company manually
-  console.warn("Tally company fetch — all formats exhausted. Last raw:", lastRaw?.slice(0, 300));
+  // Tally company fetch exhausted — handled by error throw below
   throw new Error("Tally is connected but could not read company list. Please enter your company name manually below.");
 }
 
@@ -501,11 +528,7 @@ const VOUCHER_TYPES = ["Receipt", "Payment", "Contra", "Journal", "Sales", "Purc
 
 const SCREENS = { LOGIN: -1, UPLOAD: 0, COLUMN_MAP: 1, LEDGER: 2, PREVIEW: 3, HISTORY: 4, SETTINGS: 5, DASHBOARD: 6, USER_MGMT: 7 };
 
-const USERS = [
-  { id: "u1", name: "Rajesh Kumar", email: "admin@acmecorp.in", role: "Admin", avatar: "RK", company: "Acme Corp Pvt Ltd" },
-  { id: "u2", name: "Priya Sharma", email: "ca@acmecorp.in", role: "CA", avatar: "PS", company: "Acme Corp Pvt Ltd" },
-  { id: "u3", name: "Amit Verma", email: "accountant@acmecorp.in", role: "Accountant", avatar: "AV", company: "Acme Corp Pvt Ltd" },
-];
+// User data is loaded live from Supabase — no hardcoded users
 
 // ── Helpers ──────────────────────────────────────────────────────
 const genId = () => Math.random().toString(36).slice(2, 9);
@@ -517,8 +540,17 @@ const fmtDate = v => {
     const p = String(v).split(/[\/\-\.]/);
     if (p.length === 3) {
       const [a, b, c] = p;
-      const y = c?.length === 4 ? c : a?.length === 4 ? a : "20" + c;
-      d = new Date(`${y}-${String(b).padStart(2,"0")}-${String(a?.length===4?b:a).padStart(2,"0")}`);
+      // Detect format: YYYY-MM-DD vs DD-MM-YYYY
+      if (a?.length === 4) {
+        // ISO: YYYY-MM-DD
+        d = new Date(`${a}-${String(b).padStart(2,"0")}-${String(c).padStart(2,"0")}`);
+      } else if (c?.length === 4) {
+        // Indian: DD-MM-YYYY
+        d = new Date(`${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}`);
+      } else {
+        // Short year: DD-MM-YY → 20YY
+        d = new Date(`20${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}`);
+      }
     }
   }
   return isNaN(d) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -563,7 +595,10 @@ const aiLedger = desc => {
 };
 
 const voucherType = (debit, credit, ledger) => {
-  if (ledger?.toLowerCase().includes("bank") || ledger?.toLowerCase().includes("cash")) return "Contra";
+  const lg = (ledger || "").toLowerCase();
+  // Contra: money moving between two bank/cash accounts (e.g. HDFC → ICICI)
+  if ((lg.includes("bank") || lg.includes("cash") || lg.includes("contra")) &&
+      !lg.includes("charges") && !lg.includes("sundry") && !lg.includes("salary")) return "Contra";
   if (credit && !debit) return "Receipt";
   if (debit && !credit) return "Payment";
   return "Journal";
@@ -572,7 +607,8 @@ const voucherType = (debit, credit, ledger) => {
 const detectDuplicates = rows => {
   const seen = new Map();
   return rows.map(r => {
-    const key = `${String(r.date).slice(0,10)}|${r.debit}|${r.credit}|${String(r.narration).slice(0,25).toLowerCase()}`;
+    // Key: date + amounts + first 60 chars of narration (25 was too short — false duplicates on similar descriptions)
+    const key = `${String(r.date).slice(0,10)}|${String(r.debit||"").replace(/,/g,"")}|${String(r.credit||"").replace(/,/g,"")}|${String(r.narration).slice(0,60).toLowerCase().replace(/\s+/g," ").trim()}`;
     if (seen.has(key)) return { ...r, isDuplicate: true, duplicateOf: seen.get(key) };
     seen.set(key, r.id);
     return { ...r, isDuplicate: false };
@@ -589,7 +625,7 @@ const toTallyXML = (rows, company, fy = "2024-25") => {
     return `
   <VOUCHER REMOTEID="${r.id}" VCHTYPE="${vtype}" ACTION="Create">
     <DATE>${String(r.date).replace(/[^0-9]/g, "").slice(0,8)}</DATE>
-    <NARRATION>${(r.narration || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</NARRATION>
+    <NARRATION>${(r.narration || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}</NARRATION>
     <VOUCHERTYPENAME>${vtype}</VOUCHERTYPENAME>
     <PARTYLEDGERNAME>${r.ledger}</PARTYLEDGERNAME>
     <ALLLEDGERENTRIES.LIST>
@@ -3634,8 +3670,11 @@ export default function App() {
     setUser(null);
     setScreen(SCREENS.LOGIN);
     setPendingCount(0);
-    setHistory([]); // clear history so next user can't see previous user's data
+    // Clear ALL user-specific state so next user starts clean
+    setHistory([]);
     setRows([]); setHeaders([]); setRawRows([]); setFilename("");
+    setMapping({}); setTemplateKey(""); setAuditLog([]);
+    setSelectedCompanies([]);
   };
 
   // Restore session on mount — runs once, directly sets user state
@@ -3797,11 +3836,16 @@ export default function App() {
   const onImport = () => {
     const companies = tally.companies.filter(c=>selectedCompanies.includes(c.id)).map(c=>c.name).join(", ") || selectedCompanies.join(", ");
     const validRows = rows.filter(r=>!r.isDuplicate||r.forceImport);
+    // History entry — rows_data capped at 500 rows to prevent localStorage bloat.
+    // For large statements only the first 500 rows are stored for re-import preview.
+    const rows_data_capped = rows.slice(0, 500);
     const entry = {
       id:genId(), filename, date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}),
       rawDate:new Date().toISOString(), rows:validRows.length, company:companies, status:"Imported",
       suspense:validRows.filter(r=>r.ledger==="Suspense Account").length,
-      duplicates:rows.filter(r=>r.isDuplicate).length, rows_data:rows,
+      duplicates:rows.filter(r=>r.isDuplicate).length,
+      rows_data: rows_data_capped,
+      rows_truncated: rows.length > 500,
     };
     setHistory(h => {
       const updated = [{ ...entry, savedAt: new Date().toISOString() }, ...h];
