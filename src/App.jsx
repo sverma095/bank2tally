@@ -646,382 +646,447 @@ async function loadScript(src) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  UNIVERSAL BANK STATEMENT PARSER
-//  Handles: any bank, any column count (1–10+), PDF text, OCR, Excel, CSV
-//  Philosophy: detect structure from data patterns, not bank identity
+//  BANK STATEMENT PDF PARSER — MULTI-ENGINE ARCHITECTURE
+//  Each known bank gets a precise X-position-aware parser.
+//  A fingerprint detector routes to the right parser automatically.
+//  Unknown banks fall back to the universal text-based engine.
 // ══════════════════════════════════════════════════════════════════
 
-// ── Shared date/amount patterns ───────────────────────────────────
-const RX_DATE   = /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$|^\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}$|\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{2,4}\b/i;
+// ── Shared helpers ────────────────────────────────────────────────
+const RX_DATE   = /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$|^\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$|\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{2,4}\b/i;
 const RX_AMOUNT = /^-?[\d,]+\.?\d{0,2}$|^-?[\d,]+\.\d{2}\s*(CR|DR|cr|dr)?$/;
 const RX_FOOTER = /^(total|grand total|closing|opening balance|page\s*\d|statement|account summary|sr\.?\s*no\.?$|date\s*description|transactions\s*for)/i;
 const RX_HDR    = /date|narr|desc|debit|credit|withdraw|deposit|balance|particulars|amount|remarks|details|tran|txn|cheque|chq|ref|value\s*date|posted/i;
 
-function isDateStr(s) { return RX_DATE.test(String(s).trim()); }
+function isDateStr(s)   { return RX_DATE.test(String(s).trim()); }
 function isAmountStr(s) { const c = String(s).trim().replace(/,/g,""); return RX_AMOUNT.test(c) && !isNaN(parseFloat(c)); }
-function cleanAmt(s) { return parseFloat(String(s).replace(/[^0-9.\-]/g,"")) || 0; }
+function cleanAmt(s)    { return parseFloat(String(s).replace(/[^0-9.\-]/g,"")) || 0; }
 
-// ── Step 1: PDF text extraction with X-position column reconstruction ──
-async function extractPdfText(buf) {
+// ── Load pdfjs once, share across all parsers ─────────────────────
+async function loadPdfJs() {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
-  const pdfjsLib = window["pdfjs-dist/build/pdf"];
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
+  const lib = window["pdfjs-dist/build/pdf"];
+  lib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  let allPageText = "";
-
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-
-    // Collect all text items with position
-    const items = content.items
-      .filter(it => it.str && it.str.trim())
-      .map(it => ({ x: it.transform[4], y: it.transform[5], w: it.width || 0, str: it.str }));
-
-    if (!items.length) continue;
-
-    // ── Cluster items into logical rows by Y proximity ──
-    // Use adaptive row-height: estimate from median item height
-    const ys = items.map(it => it.y).sort((a,b)=>b-a);
-    let rowTolerance = 4;
-    if (ys.length > 2) {
-      const gaps = [];
-      for (let i = 1; i < Math.min(ys.length, 30); i++) {
-        const g = ys[i-1] - ys[i];
-        if (g > 1 && g < 30) gaps.push(g);
-      }
-      if (gaps.length) {
-        gaps.sort((a,b)=>a-b);
-        rowTolerance = Math.max(2, gaps[Math.floor(gaps.length/2)] * 0.45);
-      }
-    }
-
-    // Group by Y row
-    const rowMap = {};
-    items.forEach(it => {
-      const key = Math.round(it.y / rowTolerance) * rowTolerance;
-      if (!rowMap[key]) rowMap[key] = [];
-      rowMap[key].push(it);
-    });
-    const rows = Object.keys(rowMap)
-      .sort((a,b) => Number(b)-Number(a))
-      .map(k => rowMap[k].sort((a,b) => a.x-b.x));
-
-    // ── Detect column bands from X positions ──
-    // Only use items from rows that look like data rows (≥2 items) for band detection
-    const dataRowItems = rows.filter(r => r.length >= 2).flatMap(r => r);
-    const allX = dataRowItems.map(it=>it.x).sort((a,b)=>a-b);
-
-    // Cluster X into column bands: gap threshold = ~2% of page width or 12pt min
-    const pageWidth = Math.max(...items.map(it=>it.x+it.w)) - Math.min(...items.map(it=>it.x));
-    const xGapThresh = Math.max(12, pageWidth * 0.018);
-
-    const colBands = [];
-    if (allX.length) {
-      let bandX = allX[0];
-      for (let i = 1; i < allX.length; i++) {
-        if (allX[i] - allX[i-1] > xGapThresh) { colBands.push(bandX); bandX = allX[i]; }
-      }
-      colBands.push(bandX);
-    }
-
-    // Column snap function
-    const snapCol = x => {
-      if (colBands.length <= 1) return 0;
-      for (let i = 0; i < colBands.length-1; i++) {
-        const mid = (colBands[i] + colBands[i+1]) / 2;
-        if (x < mid) return i;
-      }
-      return colBands.length-1;
-    };
-
-    // ── Build tab-separated lines ──
-    const lines = rows.map(row => {
-      // First merge micro-fragments (pdf.js splits some words)
-      const merged = [];
-      row.forEach(it => {
-        const last = merged[merged.length-1];
-        if (last && (it.x - (last.x+last.w)) < 3) {
-          last.str += it.str; last.w = it.x+it.w - last.x;
-        } else merged.push({...it});
-      });
-
-      if (colBands.length <= 2) {
-        // 1-2 column document: space-join (single-column or simple 2-col)
-        return merged.map(it=>it.str.trim()).join("  ");
-      }
-
-      // Multi-column: assign to slots
-      const slots = new Array(colBands.length).fill("");
-      merged.forEach(it => {
-        const c = snapCol(it.x);
-        slots[c] = slots[c] ? slots[c]+" "+it.str.trim() : it.str.trim();
-      });
-      // Trim trailing empty
-      let s = slots.join("\t");
-      while (s.endsWith("\t")) s = s.slice(0,-1);
-      return s;
-    });
-
-    allPageText += lines.filter(l=>l.trim()).join("\n") + "\n";
-  }
-  return allPageText.trim();
+  return lib;
 }
 
-// ── Step 2: OCR fallback for scanned PDFs ────────────────────────
+// Extract raw word items with x/y positions from all pages
+// Y is converted to top-down (0 = page top) for consistent processing
+async function extractWordItems(buf) {
+  const pdfjsLib = await loadPdfJs();
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const pages = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const vp   = page.getViewport({ scale: 1 });
+    const con  = await page.getTextContent();
+    const items = con.items
+      .filter(it => it.str && it.str.trim())
+      .map(it => ({
+        x:   Math.round(it.transform[4] * 10) / 10,
+        y:   Math.round((vp.height - it.transform[5]) * 10) / 10,  // top-down Y
+        w:   it.width || 0,
+        str: it.str,
+      }));
+    pages.push({ pageNum: p, items, width: vp.width, height: vp.height });
+  }
+  return pages;
+}
+
+// ── Bank fingerprint detector ─────────────────────────────────────
+function detectBank(pages) {
+  const sample = pages.flatMap(p => p.items).slice(0, 150).map(it => it.str).join(" ").toLowerCase();
+  if (/icici\s*bank|icicibank|detailed\s*statement|cr\/dr.*transaction.*amount/i.test(sample)) return "icici";
+  if (/state\s*bank\s*of\s*india|\bsbi\b|sbchq|sbin\d{7}/i.test(sample))                      return "sbi";
+  if (/hdfc\s*bank|withdrawal\s*amt\.|deposit\s*amt\./i.test(sample))                          return "hdfc";
+  if (/axis\s*bank|tran\s*date.*particulars/i.test(sample))                                    return "axis";
+  if (/kotak\s*(mahindra|bank)/i.test(sample))                                                  return "kotak";
+  if (/punjab\s*national\s*bank|\bpnb\b/i.test(sample))                                        return "pnb";
+  if (/bank\s*of\s*baroda|\bbaroda\b/i.test(sample))                                           return "bob";
+  if (/yes\s*bank/i.test(sample))                                                               return "yes";
+  if (/idfc\s*(first|bank)/i.test(sample))                                                     return "idfc";
+  if (/canara\s*bank/i.test(sample))                                                            return "canara";
+  if (/union\s*bank/i.test(sample))                                                             return "union";
+  if (/bank\s*of\s*india/i.test(sample))                                                       return "boi";
+  if (/federal\s*bank/i.test(sample))                                                           return "federal";
+  if (/indusind/i.test(sample))                                                                 return "indus";
+  if (/rbl\s*bank/i.test(sample))                                                               return "rbl";
+  return "generic";
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  BANK-SPECIFIC PARSERS  (work directly on word-position data)
+// ══════════════════════════════════════════════════════════════════
+
+// Helper: group word items into physical lines by Y proximity
+function groupIntoLines(items, pageTolerance = 3) {
+  if (!items.length) return [];
+  // Adaptive tolerance from median Y gap
+  const ys = [...new Set(items.map(it => it.y))].sort((a,b)=>a-b);
+  let tol = pageTolerance;
+  if (ys.length > 3) {
+    const gaps = [];
+    for (let i = 1; i < Math.min(ys.length, 30); i++) { const g = ys[i]-ys[i-1]; if (g>0.5&&g<20) gaps.push(g); }
+    if (gaps.length) { gaps.sort((a,b)=>a-b); tol = Math.max(1.5, gaps[Math.floor(gaps.length/2)] * 0.6); }
+  }
+  const lineMap = {};
+  items.forEach(it => {
+    const key = Math.round(it.y / tol) * tol;
+    if (!lineMap[key]) lineMap[key] = [];
+    lineMap[key].push(it);
+  });
+  return Object.keys(lineMap)
+    .sort((a,b) => Number(a)-Number(b))
+    .map(k => ({ y: Number(k), items: lineMap[k].sort((a,b)=>a.x-b.x) }));
+}
+
+// Helper: convert lines into tab-separated text using X-band snapping
+function linesToText(lines, pageWidth) {
+  // Detect X column bands from lines with 2+ items
+  const allX = lines.filter(l=>l.items.length>=2).flatMap(l=>l.items.map(it=>it.x)).sort((a,b)=>a-b);
+  const thresh = Math.max(10, pageWidth * 0.02);
+  const bands = [];
+  if (allX.length) { let bx=allX[0]; for(let i=1;i<allX.length;i++){if(allX[i]-allX[i-1]>thresh){bands.push(bx);bx=allX[i];}} bands.push(allX[allX.length-1]); }
+  const snap = x => { for(let i=0;i<bands.length-1;i++){if(x<(bands[i]+bands[i+1])/2)return i;} return Math.max(0,bands.length-1); };
+
+  return lines.map(line => {
+    // Merge micro-fragments first
+    const merged = [];
+    line.items.forEach(it => {
+      const last = merged[merged.length-1];
+      if (last && (it.x-(last.x+last.w))<3) { last.str+=it.str; last.w=it.x+it.w-last.x; }
+      else merged.push({...it});
+    });
+    if (bands.length <= 2) return merged.map(it=>it.str.trim()).join("  ");
+    const slots = new Array(bands.length).fill("");
+    merged.forEach(it => { const c=snap(it.x); slots[c]=slots[c]?slots[c]+" "+it.str.trim():it.str.trim(); });
+    let s = slots.join("\t"); while(s.endsWith("\t"))s=s.slice(0,-1); return s;
+  }).filter(l=>l.trim());
+}
+
+// ── ICICI CA/SA Detailed Statement ───────────────────────────────
+// Each transaction spans 2-3 physical lines with fixed X column bands:
+//   No<38 | TxnID 38-107 | ValDate 108-182 | PostedDate 183-415
+//   Desc 416-699 | CrDr 700-740 | Amount 741-825 | Balance 826+
+function parseICICIWords(pages) {
+  // Exact X boundaries measured from actual ICICI CA PDF
+  const BANDS = [
+    { name:"no",      lo:0,    hi:38   },
+    { name:"txnid",   lo:38,   hi:108  },
+    { name:"valdate", lo:108,  hi:183  },
+    { name:"posted",  lo:183,  hi:416  },
+    { name:"desc",    lo:416,  hi:700  },
+    { name:"crdr",    lo:700,  hi:741  },
+    { name:"amount",  lo:741,  hi:826  },
+    { name:"balance", lo:826,  hi:9999 },
+  ];
+  const snapCol = x => (BANDS.find(b => x >= b.lo && x < b.hi) || BANDS[BANDS.length-1]).name;
+
+  const OUT_HEADERS = ["Value Date","Transaction ID","Description","Cr/Dr","Amount (INR)","Balance (INR)"];
+  const rows = [];
+
+  pages.forEach(({ items }) => {
+    if (!items.length) return;
+    const physLines = groupIntoLines(items, 2);
+
+    // Group physical lines into transaction blocks (gap > 18pt = new transaction)
+    const blocks = [];
+    let curBlock = [];
+    physLines.forEach((line, i) => {
+      if (i === 0) { curBlock.push(line); return; }
+      if (line.y - physLines[i-1].y > 18) {
+        if (curBlock.length) blocks.push(curBlock);
+        curBlock = [line];
+      } else {
+        curBlock.push(line);
+      }
+    });
+    if (curBlock.length) blocks.push(curBlock);
+
+    blocks.forEach(block => {
+      const slots = {};
+      BANDS.forEach(b => slots[b.name] = []);
+      block.forEach(line => line.items.forEach(it => slots[snapCol(it.x)].push(it.str.trim())));
+
+      const valDate = slots.valdate.find(isDateStr) || "";
+      if (!valDate) return; // header / footer block
+
+      const txnId   = slots.txnid.join("").trim();
+      const desc    = slots.desc.join(" ").trim();
+      const crdr    = slots.crdr.join("").trim().toUpperCase();
+      const amount  = slots.amount.find(isAmountStr) || "";
+      const balance = slots.balance.find(isAmountStr) || "";
+
+      if (!amount && !balance) return;
+
+      rows.push([valDate, txnId, desc, crdr, amount.replace(/,/g,""), balance.replace(/,/g,"")]);
+    });
+  });
+
+  return rows.length ? { headers: OUT_HEADERS, rows, _bankHint: "icici" } : null;
+}
+
+// ── SBI Account Statement ─────────────────────────────────────────
+// Clean 7-col table preceded by a metadata block (Label : Value pairs).
+// Header: Txn Date | Value Date | Description | Ref No./Cheque No. | Debit | Credit | Balance
+// Description wraps across 2-3 lines, Ref No. column header also wraps.
+function parseSBIWords(pages) {
+  const allLines = pages.flatMap(({ items, width }) => {
+    const physLines = groupIntoLines(items, 3);
+    return linesToText(physLines, width);
+  });
+
+  const SEP = /\t|\s{2,}/;
+  const isKV = line => {
+    // KV lines: "Account Name    : Mr. Atul Kumar Verma"
+    const colons = (line.match(/:/g)||[]).length;
+    const parts  = line.split(":").map(s=>s.trim());
+    return colons === 1 && /^[A-Za-z\s\.%\(\)\/]+$/.test(parts[0]) && parts[0].split(" ").length <= 6;
+  };
+
+  // Find the real header row (score by bank keyword hits, skip KV lines)
+  let hdrIdx = -1, best = 0;
+  allLines.forEach((line, i) => {
+    if (RX_FOOTER.test(line) || isKV(line)) return;
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if (cols.length < 3) return;
+    const score = cols.filter(c=>RX_HDR.test(c)).length + (cols.length >= 5 ? 2 : 0);
+    if (score > best && cols.filter(c=>RX_HDR.test(c)).length >= 3) { best = score; hdrIdx = i; }
+  });
+  if (hdrIdx === -1) return null;
+
+  // Merge wrapped header line (SBI wraps "Ref No./Cheque" / "No." onto next line)
+  let headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const nxt = (allLines[hdrIdx+1]||"").split(SEP).map(c=>c.trim()).filter(Boolean);
+  if (nxt.length && nxt.length <= headers.length && !nxt.some(isDateStr) && !nxt.some(isAmountStr)
+      && nxt.every(w => /^[A-Za-z\.\(\)\/\-]+$/.test(w))) {
+    headers = headers.map((h,i) => nxt[i] ? h+" "+nxt[i] : h);
+    hdrIdx++;
+  }
+
+  // Sliding-window row stitcher (description wraps across lines)
+  const SNO    = /^\d{1,6}$/;
+  const NEWROW = cols => isDateStr(cols[0]) || (cols.length >= 2 && isDateStr(cols[1]));
+  const txnRows = []; let cur = null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line) || isKV(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if (!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if (isAmountStr(tok)) {
+          let pl=false;
+          for(let k=cur.length-1;k>=Math.max(0,cur.length-4);k--){if(!cur[k]){cur[k]=tok;pl=true;break;}}
+          if(!pl)cur.push(tok);
+        } else {
+          const ni=cur.findIndex((c,i)=>i>0&&!isDateStr(c)&&!isAmountStr(c)&&!SNO.test(c));
+          if(ni!==-1)cur[ni]=(cur[ni]+" "+tok).trim();else cur.push(tok);
+        }
+      });
+    } else { if(cur)txnRows.push(cur); cur=[...cols]; }
+  });
+  if (cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+
+  return rows.length ? { headers, rows, _bankHint:"sbi" } : null;
+}
+
+// ── HDFC Bank Statement ───────────────────────────────────────────
+// 6-col: Date | Narration | Chq/Ref | Withdrawal Amt. | Deposit Amt. | Closing Balance
+function parseHDFCWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = -1, best = 0;
+  allLines.forEach((line,i) => {
+    if (i > 40 || RX_FOOTER.test(line)) return;
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    const score = cols.filter(c=>RX_HDR.test(c)).length;
+    if (score >= 3 && score > best) { best=score; hdrIdx=i; }
+  });
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const NEWROW  = cols => isDateStr(cols[0]);
+  const txnRows = []; let cur = null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if (!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if (isAmountStr(tok)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c)&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if (cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+  return rows.length ? { headers, rows, _bankHint:"hdfc" } : null;
+}
+
+// ── Axis Bank Statement ───────────────────────────────────────────
+// 6-col: Tran Date | PARTICULARS | CHQNO | DR | CR | BAL
+function parseAxisWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,4), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<40 && /PARTICULARS|Tran\s*Date/i.test(line) && line.split(SEP).filter(c=>RX_HDR.test(c)).length >= 3);
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const NEWROW  = cols => isDateStr(cols[0]);
+  const txnRows = []; let cur = null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if (!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if (isAmountStr(tok)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c)&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if (cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+  return rows.length ? { headers, rows, _bankHint:"axis" } : null;
+}
+
+// ── Generic / universal fallback parser (text-based) ─────────────
+function parsePdfText(rawText) {
+  const lines = rawText.split("\n").map(l=>l.trim()).filter(Boolean);
+  const useTab = lines.filter(l=>l.includes("\t")).length > lines.length*0.3;
+  const SEP = useTab ? /\t/ : /\s{2,}/;
+
+  const isKVLine = line => {
+    const colons=(line.match(/:/g)||[]).length;
+    if(colons!==1)return false;
+    const p=line.split(":").map(s=>s.trim());
+    return /^[A-Za-z\s\.\(\)%\/]+$/.test(p[0])&&p[0].split(/\s+/).length<=5;
+  };
+
+  let hdrIdx=-1,best=0;
+  for(let i=0;i<Math.min(lines.length,60);i++){
+    if(RX_FOOTER.test(lines[i])||isKVLine(lines[i]))continue;
+    const cols=lines[i].split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(cols.length<3)continue;
+    const s=cols.filter(c=>RX_HDR.test(c)).length;
+    const b=s>=4?3:s>=3?1:0;
+    if((s+b)>best&&s>=2){best=s+b;hdrIdx=i;}
+  }
+
+  let synth=false;
+  if(hdrIdx===-1){
+    for(let i=0;i<Math.min(lines.length,60);i++){
+      const c=lines[i].split(SEP).map(c=>c.trim()).filter(Boolean);
+      if(c.length>=2&&isDateStr(c[0])){hdrIdx=Math.max(0,i-1);synth=true;break;}
+    }
+    if(hdrIdx===-1)for(let i=0;i<Math.min(lines.length,60);i++){
+      const c=lines[i].split(SEP).map(c=>c.trim()).filter(Boolean);
+      if(c.filter(isAmountStr).length>=2){hdrIdx=Math.max(0,i-1);synth=true;break;}
+    }
+    if(hdrIdx===-1)throw new Error("Could not find transaction data. Try downloading as Excel/CSV from your bank portal.");
+  }
+
+  let headers;
+  if(synth){
+    const fd=lines.slice(hdrIdx+1).find(l=>{const c=l.split(SEP).filter(Boolean);return c.length>=2&&(isDateStr(c[0])||isAmountStr(c[c.length-1]));});
+    const cc=fd?fd.split(SEP).filter(Boolean).length:4;
+    const gn=["Date","Description","Withdrawal","Deposit","Balance","Ref"];
+    headers=Array.from({length:cc},(_,i)=>gn[i]||`Col${i+1}`);
+  } else {
+    const h=lines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+    const n=lines[hdrIdx+1]?lines[hdrIdx+1].split(SEP).map(c=>c.trim()).filter(Boolean):[];
+    const ok=n.length>0&&n.length<=h.length&&!n.some(isDateStr)&&!n.some(isAmountStr)&&
+      (n.filter(c=>RX_HDR.test(c)).length>=2||(n.length<=h.length&&n.every(w=>/^[A-Za-z\.\(\)\/]+$/.test(w))));
+    if(ok){headers=h.map((x,i)=>n[i]?x+" "+n[i]:x);if(n.length>h.length)headers.push(...n.slice(h.length));hdrIdx++;}
+    else headers=h;
+  }
+
+  const dataLines=lines.slice(hdrIdx+1).filter(l=>!RX_FOOTER.test(l)&&l.trim());
+  const dateOnly=dataLines.filter(l=>isDateStr(l.split(SEP)[0])&&l.split(SEP).filter(Boolean).length<=2);
+  if(!useTab&&dateOnly.length>dataLines.length*0.25){
+    const txns=[];let cur=null;
+    dataLines.forEach(line=>{
+      if(RX_FOOTER.test(line))return;
+      const p=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      if(isDateStr(p[0])){if(cur)txns.push(cur);cur={date:p[0],narr:p.slice(1).join(" "),amts:[]};}
+      else if(cur){const a=p.filter(isAmountStr);const w=p.filter(x=>!isAmountStr(x));if(a.length)cur.amts.push(...a);if(w.length)cur.narr+=" "+w.join(" ");}
+    });
+    if(cur)txns.push(cur);
+    const oR=txns.filter(t=>t.amts.length).map(t=>{
+      const a=t.amts;const bal=a[a.length-1];const ta=a.length>=2?a[a.length-2]:a[0];
+      const iD=/dr$/i.test(ta)||t.narr.toUpperCase().includes(" DR");const c=ta.replace(/[^0-9.]/g,"");
+      return[t.date,t.narr.trim(),iD?c:"",iD?"":c,bal.replace(/[^0-9.]/g,"")];
+    });
+    if(oR.length)return{headers:["Date","Narration","Debit","Credit","Balance"],rows:oR};
+  }
+
+  const SNO=/^\d{1,6}$/;
+  const NEWROW=c=>isDateStr(c[0])||SNO.test(c[0])||(c.length>=2&&isDateStr(c[1]));
+  const tL=[];let cur2=null;
+  lines.slice(hdrIdx+1).forEach(line=>{
+    if(!line.trim()||RX_FOOTER.test(line)){if(cur2){tL.push(cur2);cur2=null;}return;}
+    const c=line.split(SEP).map(x=>x.trim()).filter(Boolean);
+    if(!c.length)return;
+    if(NEWROW(c)){if(cur2)tL.push(cur2);cur2=[...c];}
+    else if(cur2){
+      c.forEach(tok=>{
+        if(isAmountStr(tok)){let pl=false;for(let k=cur2.length-1;k>=Math.max(0,cur2.length-4);k--){if(!cur2[k]){cur2[k]=tok;pl=true;break;}}if(!pl)cur2.push(tok);}
+        else if(/^(DR|CR)$/i.test(tok)){for(let k=cur2.length-1;k>=0;k--){if(isAmountStr(cur2[k])){cur2[k]+=" "+tok.toUpperCase();break;}}}
+        else{let ni=-1;for(let k=1;k<cur2.length;k++){if(!isAmountStr(cur2[k])&&!isDateStr(cur2[k])&&!SNO.test(cur2[k])){ni=k;break;}}if(ni!==-1)cur2[ni]=(cur2[ni]+" "+tok).trim();else cur2.push(tok);}
+      });
+    } else{if(cur2)tL.push(cur2);cur2=[...c];}
+  });
+  if(cur2)tL.push(cur2);
+  if(!tL.length)throw new Error("PDF parsed but no rows found. Try exporting as Excel or CSV.");
+
+  const rows=tL.filter(r=>r.some(c=>c)).map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+  if(headers.length<=3){
+    const ac=headers.findIndex((_,i)=>rows.slice(0,10).filter(r=>isAmountStr(r[i])).length>3);
+    if(ac!==-1){const ex=rows.map(r=>{const ra=(r[ac]||"").trim();const iD=/dr$/i.test(ra)||ra.startsWith("-");const a=ra.replace(/[^0-9.]/g,"");const re=r.filter((_,i)=>i!==ac);return[re[0]||"",re[1]||"",iD?a:"",iD?"":a,r[r.length-1]||""];});return{headers:["Date","Narration","Debit","Credit","Balance"],rows:ex};}
+  }
+  return{headers,rows};
+}
+
+// ── Generic text extraction for the universal parser ──────────────
+async function extractPdfText(buf) {
+  const pages = await extractWordItems(buf);
+  return pages.map(({items, width}) => linesToText(groupIntoLines(items,3), width).join("\n")).join("\n");
+}
+
+// ── OCR fallback for scanned PDFs ────────────────────────────────
 async function ocrPdfText(buf, onProgress) {
-  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+  await loadPdfJs();
   await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
   const pdfjsLib = window["pdfjs-dist/build/pdf"];
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
   const worker = await window.Tesseract.createWorker("eng");
   let fullText = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    onProgress && onProgress(`OCR page ${i}/${pdf.numPages}…`);
-    const page = await pdf.getPage(i);
-    const vp = page.getViewport({ scale: 2.5 }); // higher scale = better OCR
-    const canvas = document.createElement("canvas");
-    canvas.width = vp.width; canvas.height = vp.height;
-    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
-    const { data: { text } } = await worker.recognize(canvas.toDataURL("image/png"));
-    fullText += text + "\n";
+  for (let i=1;i<=pdf.numPages;i++) {
+    onProgress&&onProgress(`OCR page ${i}/${pdf.numPages}…`);
+    const page=await pdf.getPage(i);const vp=page.getViewport({scale:2.5});
+    const canvas=document.createElement("canvas");canvas.width=vp.width;canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext("2d"),viewport:vp}).promise;
+    const {data:{text}}=await worker.recognize(canvas.toDataURL("image/png"));
+    fullText+=text+"\n";
   }
   await worker.terminate();
   return fullText.trim();
-}
-
-// ── Step 3: Universal text → {headers, rows} parser ──────────────
-// Works for ANY bank statement structure:
-//   • Multi-column (date | narration | debit | credit | balance)
-//   • 2-column (date+narration | combined amount)
-//   • Single-column (each field on its own line, grouped by date)
-//   • Combined Cr/Dr (amount + DR/CR suffix or separate flag column)
-//   • OCR output (messy, no tabs, lots of noise)
-function parsePdfText(rawText) {
-  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
-
-  // ── A: Detect delimiter (tab = structured PDF, spaces = OCR/space-aligned) ──
-  const tabLines = lines.filter(l => l.includes("\t"));
-  const useTab = tabLines.length > lines.length * 0.3;
-  const SEP = useTab ? /\t/ : /\s{2,}/;
-
-  // ── B: Find the header row ────────────────────────────────────────
-  // Skip metadata/KV lines like "Date : 8 May 2026", "Account Number : 00123"
-  // These appear at top of SBI, HDFC, Kotak etc. PDFs and fool naive header detection.
-  // A KV line = one colon, ≤3 parts, left side is a label word(s), right side is a value.
-  const isKVLine = (line) => {
-    const colons = (line.match(/:/g) || []).length;
-    if (colons !== 1) return false;
-    const parts = line.split(":").map(s=>s.trim());
-    // Label part: only letters/spaces/dots/parens, no digits except year-like
-    const labelLooksLikeLabel = /^[A-Za-z\s\.\(\)%\/]+$/.test(parts[0]);
-    return labelLooksLikeLabel && parts[0].split(/\s+/).length <= 5;
-  };
-
-  let headerIdx = -1;
-  let bestScore = 0;
-  for (let i = 0; i < Math.min(lines.length, 60); i++) {
-    if (RX_FOOTER.test(lines[i])) continue;
-    if (isKVLine(lines[i])) continue;     // skip "Label : Value" metadata
-    const cols = lines[i].split(SEP).map(c=>c.trim()).filter(Boolean);
-    if (cols.length < 3) continue;        // real table headers have 3+ columns
-    // Score: how many columns match bank header keywords
-    const score = cols.filter(c => RX_HDR.test(c)).length;
-    // Bonus: line has 4+ header keywords = very likely the real header row
-    const bonus = score >= 4 ? 3 : score >= 3 ? 1 : 0;
-    if ((score + bonus) > bestScore && score >= 2) { bestScore = score + bonus; headerIdx = i; }
-  }
-
-  // ── C: If no header found, try to infer from data pattern ────────
-  // Look for the first line containing a date — that's likely a data row
-  // Generate synthetic headers based on column count
-  let syntheticHeaders = false;
-  if (headerIdx === -1) {
-    for (let i = 0; i < Math.min(lines.length, 60); i++) {
-      const cols = lines[i].split(SEP).map(c=>c.trim()).filter(Boolean);
-      if (cols.length >= 2 && isDateStr(cols[0])) {
-        headerIdx = Math.max(0, i-1);
-        syntheticHeaders = true;
-        break;
-      }
-    }
-    // Last resort: find any line with 2+ amounts (balance sheet style)
-    if (headerIdx === -1) {
-      for (let i = 0; i < Math.min(lines.length, 60); i++) {
-        const cols = lines[i].split(SEP).map(c=>c.trim()).filter(Boolean);
-        if (cols.filter(isAmountStr).length >= 2) { headerIdx = Math.max(0, i-1); syntheticHeaders = true; break; }
-      }
-    }
-    if (headerIdx === -1) throw new Error("Could not find transaction data in this PDF. Try downloading as Excel/CSV from your bank portal.");
-  }
-
-  // ── D: Parse column headers ───────────────────────────────────────
-  let headers;
-  if (syntheticHeaders) {
-    // Peek at first data row to determine column count
-    const firstData = lines.slice(headerIdx+1).find(l => {
-      const c = l.split(SEP).filter(Boolean);
-      return c.length >= 2 && (isDateStr(c[0]) || isAmountStr(c[c.length-1]));
-    });
-    const colCount = firstData ? firstData.split(SEP).filter(Boolean).length : 4;
-    // Build generic headers — autoMap will fuzzy-match them
-    const genericNames = ["Date","Description","Withdrawal","Deposit","Balance","Ref"];
-    headers = Array.from({length:colCount}, (_,i) => genericNames[i] || `Col${i+1}`);
-  } else {
-    // Real header row — but it might be split across 2 lines (some banks wrap headers)
-    // e.g. SBI: "Ref No./Cheque" on line 1, "No." on line 2
-    const hLine = lines[headerIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
-    const nextLine = lines[headerIdx+1] ? lines[headerIdx+1].split(SEP).map(c=>c.trim()).filter(Boolean) : [];
-    // Next line is a header continuation if:
-    // (a) it has 2+ header keywords, OR
-    // (b) it has ≤ hLine.length words, none are dates/amounts, and the combined header still makes sense
-    const noDateOrAmt = !nextLine.some(isDateStr) && !nextLine.some(isAmountStr);
-    const fitsColumnCount = nextLine.length > 0 && nextLine.length <= hLine.length;
-    const nextIsHdrContinuation = noDateOrAmt && fitsColumnCount && (
-      nextLine.filter(c => RX_HDR.test(c)).length >= 2 ||
-      // Single-word continuation: "No.", "Date", "(INR)" etc. appended to previous header line
-      (nextLine.length <= hLine.length && nextLine.every(w => /^[A-Za-z\.\(\)\/]+$/.test(w)))
-    );
-    if (nextIsHdrContinuation) {
-      headers = hLine.map((h,i) => nextLine[i] ? h+" "+nextLine[i] : h);
-      if (nextLine.length > hLine.length) headers.push(...nextLine.slice(hLine.length));
-      headerIdx++;
-    } else {
-      headers = hLine;
-    }
-  }
-
-  // ── E: Detect if this is a single-column / per-line format ───────
-  // Pattern: lines alternate between date-lines and narration/amount lines (no tabs)
-  const dataLines = lines.slice(headerIdx+1).filter(l => !RX_FOOTER.test(l) && l.trim());
-  const dateOnlyLines = dataLines.filter(l => isDateStr(l.split(SEP)[0]) && l.split(SEP).filter(Boolean).length <= 2);
-  const isSingleCol = !useTab && dateOnlyLines.length > dataLines.length * 0.25;
-
-  if (isSingleCol) {
-    // ── Single-column mode: group lines into transactions by date anchor ──
-    const txns = [];
-    let cur = null;
-    dataLines.forEach(line => {
-      if (RX_FOOTER.test(line)) return;
-      const parts = line.split(SEP).map(c=>c.trim()).filter(Boolean);
-      if (isDateStr(parts[0])) {
-        if (cur) txns.push(cur);
-        cur = { date: parts[0], narration: parts.slice(1).join(" "), amounts: [] };
-      } else if (cur) {
-        const amts = parts.filter(isAmountStr);
-        const words = parts.filter(p=>!isAmountStr(p));
-        if (amts.length) cur.amounts.push(...amts);
-        if (words.length) cur.narration += " " + words.join(" ");
-      }
-    });
-    if (cur) txns.push(cur);
-
-    // Convert to 5-column table: Date, Narration, Debit, Credit, Balance
-    // Use heuristic: last amount = balance, second-to-last = transaction amount,
-    // DR/CR suffix or sign determines debit vs credit
-    const outHeaders = ["Date","Narration","Debit","Credit","Balance"];
-    const outRows = txns.filter(t=>t.amounts.length).map(t => {
-      const amts = t.amounts;
-      const balance = amts[amts.length-1];
-      const txnAmt  = amts.length >= 2 ? amts[amts.length-2] : amts[0];
-      const isDr = /dr$/i.test(txnAmt) || t.narration.toUpperCase().includes(" DR") || (amts.length===1 && parseFloat(txnAmt)<0);
-      const clean = txnAmt.replace(/[^0-9.]/g,"");
-      return [t.date, t.narration.trim(), isDr?clean:"", isDr?"":clean, balance.replace(/[^0-9.]/g,"")];
-    });
-    if (outRows.length) return { headers: outHeaders, rows: outRows };
-  }
-
-  // ── F: Multi-column mode — sliding-window row stitcher ───────────
-  // Problem: pdf.js/OCR often puts one logical row across 2-3 physical lines.
-  // Solution: A "transaction" starts when the first column looks like a date or serial number.
-  //           Subsequent non-date lines are continuation fragments, merged in.
-  const SNO   = /^\d{1,6}$/;
-  const NEWROW = (cols) => isDateStr(cols[0]) || SNO.test(cols[0]) || (cols.length>=2 && isDateStr(cols[1]));
-
-  const rawDataLines = lines.slice(headerIdx+1);
-  const txnLines = []; // each element: array-of-column-values for one transaction
-
-  let cur2 = null;
-  rawDataLines.forEach(line => {
-    if (!line.trim() || RX_FOOTER.test(line)) {
-      if (cur2) { txnLines.push(cur2); cur2 = null; }
-      return;
-    }
-    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
-    if (!cols.length) return;
-
-    if (NEWROW(cols)) {
-      if (cur2) txnLines.push(cur2);
-      cur2 = [...cols];
-    } else if (cur2) {
-      // Continuation line — intelligently merge into existing row
-      cols.forEach(token => {
-        if (isAmountStr(token)) {
-          // Find the first empty column slot at an amount-likely position (right side)
-          // or append as a new column
-          let placed = false;
-          for (let k = cur2.length-1; k >= Math.max(0, cur2.length-4); k--) {
-            if (!cur2[k] || cur2[k]==="") { cur2[k] = token; placed = true; break; }
-          }
-          if (!placed) cur2.push(token);
-        } else if (/^(DR|CR)$/i.test(token)) {
-          // DR/CR flag — append to last amount
-          for (let k = cur2.length-1; k>=0; k--) {
-            if (isAmountStr(cur2[k])) { cur2[k] += " "+token.toUpperCase(); break; }
-          }
-        } else {
-          // Text continuation — append to narration (first text-looking column after date)
-          let narrIdx = -1;
-          for (let k = 1; k < cur2.length; k++) {
-            if (!isAmountStr(cur2[k]) && !isDateStr(cur2[k]) && !SNO.test(cur2[k])) { narrIdx = k; break; }
-          }
-          if (narrIdx !== -1) cur2[narrIdx] = (cur2[narrIdx]+" "+token).trim();
-          else cur2.push(token);
-        }
-      });
-    } else {
-      // Orphan line with no active transaction (e.g. first line of page after footer)
-      // Start a new row anyway
-      if (cur2) txnLines.push(cur2);
-      cur2 = [...cols];
-    }
-  });
-  if (cur2) txnLines.push(cur2);
-
-  if (!txnLines.length) throw new Error("PDF parsed but no transaction rows found. Try exporting as Excel or CSV.");
-
-  // Normalise row length to match header count (pad or trim)
-  const rows = txnLines
-    .filter(r => r.some(c=>c))  // skip fully empty
-    .map(r => {
-      while (r.length < headers.length) r.push("");
-      return r.slice(0, headers.length);
-    });
-
-  // ── G: Handle 2-column "combined amount" format ──────────────────
-  // Some banks (Axis PDF, some credit cards) emit: Date | Narration | Amount(DR/CR)
-  // Detect: if there's exactly 1 amount column and rows have DR/CR suffix on amounts
-  if (headers.length <= 3) {
-    const amtCol = headers.findIndex((_,i) => rows.slice(0,10).filter(r=>isAmountStr(r[i])).length > 3);
-    if (amtCol !== -1) {
-      // Expand to 5 columns: Date, Narration, Debit, Credit, Balance
-      const expanded = rows.map(r => {
-        const rawAmt = (r[amtCol]||"").trim();
-        const isDr = /dr$/i.test(rawAmt) || rawAmt.startsWith("-");
-        const amt = rawAmt.replace(/[^0-9.]/g,"");
-        const rest = r.filter((_,i)=>i!==amtCol);
-        return [rest[0]||"", rest[1]||"", isDr?amt:"", isDr?"":amt, r[r.length-1]||""];
-      });
-      return { headers:["Date","Narration","Debit","Credit","Balance"], rows: expanded };
-    }
-  }
-
-  return { headers, rows };
 }
 
 // ── File Parser entry point ───────────────────────────────────────
@@ -1037,14 +1102,51 @@ async function parseFile(file, onProgress) {
       e.code = "ERR_002"; throw e;
     }
     onProgress && onProgress("Loading PDF engine…");
-    let text = "";
-    try { text = await extractPdfText(buf); } catch {}
-    // Scanned PDF fallback: if too little real text, use OCR
-    if (text.replace(/\s+/g,"").length < 80) {
-      onProgress && onProgress("Scanned PDF — starting OCR (may take 30–60 s)…");
-      text = await ocrPdfText(buf, onProgress);
+
+    // ── Step 1: Extract word items with X/Y positions ──────────────
+    let pages = [];
+    let isScanned = false;
+    try {
+      pages = await extractWordItems(buf);
+      const totalWords = pages.reduce((n, p) => n + p.items.length, 0);
+      isScanned = totalWords < 30; // very few words = scanned image PDF
+    } catch { isScanned = true; }
+
+    // ── Step 2: Scanned PDF → OCR ──────────────────────────────────
+    if (isScanned) {
+      onProgress && onProgress("Scanned PDF detected — starting OCR (may take 30–60 s)…");
+      const ocrText = await ocrPdfText(buf, onProgress);
+      onProgress && onProgress("Parsing OCR output…");
+      return parsePdfText(ocrText);
     }
+
+    // ── Step 3: Detect bank and route to the right parser ──────────
+    const bank = detectBank(pages);
+    onProgress && onProgress(`Detected: ${bank.toUpperCase()} — parsing…`);
+
+    const PARSERS = {
+      icici: parseICICIWords,
+      sbi:   parseSBIWords,
+      hdfc:  parseHDFCWords,
+      axis:  parseAxisWords,
+    };
+
+    // Try bank-specific parser first
+    if (PARSERS[bank]) {
+      try {
+        const result = PARSERS[bank](pages);
+        if (result && result.rows.length > 0) return result;
+        // If it returned 0 rows, fall through to generic
+        onProgress && onProgress("Bank parser found no rows — trying generic…");
+      } catch (e) {
+        onProgress && onProgress("Bank parser error — trying generic…");
+        console.warn(`${bank} parser failed:`, e);
+      }
+    }
+
+    // ── Step 4: Generic fallback (works for Kotak, PNB, Yes, IDFC, etc.) ──
     onProgress && onProgress("Parsing transaction table…");
+    const text = pages.map(({items, width}) => linesToText(groupIntoLines(items, 3), width).join("\n")).join("\n");
     return parsePdfText(text);
   }
 
