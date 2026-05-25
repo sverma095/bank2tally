@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -195,10 +195,6 @@ const TALLY_COMPANIES_FALLBACK = []; // empty until gateway responds
    a tiny Express server on localhost:3001 that forwards to :9000).
 ─────────────────────────────────────────────────────────────────── */
 
-// Build Tally XML request envelope
-function tallyRequest(body) {
-  return `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME>${body}</REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
-}
 
 // ── Bank2Tally Universal Connector ──────────────────────────────
 // Uses Chrome Extension to bypass HTTPS→HTTP mixed content restriction
@@ -211,6 +207,8 @@ function _markExtensionReady() {
   window.__bank2tallyExtension = true; // sync both flags
 }
 window.addEventListener("message", (e) => {
+  // Only accept messages from same origin or extension (null origin = extension)
+  if (e.origin && e.origin !== window.location.origin && !e.origin.startsWith("chrome-extension://")) return;
   if (e.data?.type === "BANK2TALLY_EXTENSION_PRESENT") {
     _markExtensionReady();
   }
@@ -288,8 +286,8 @@ async function fetchTallyCompanies(host, port) {
   // Format A: Get currently OPEN company via SVCURRENTCOMPANY system variable
   const xmlA = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Company Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
-  // Format B: Get company name via Collection of companies
-  const xmlB = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES><REPORTNAME>Day Book</REPORTNAME></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  // Format B: List of Ledgers (lighter than Day Book)
+  const xmlB = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Accounts</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
   // Format C: Direct collection request — the most reliable for Tally Prime 3.x
   const xmlC = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Primary Groups</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
@@ -350,7 +348,7 @@ async function fetchTallyCompanyDetails(host, port, companyName) {
     <BODY><EXPORTDATA><REQUESTDESC>
       <REPORTNAME>Company Info</REPORTNAME>
       <STATICVARIABLES>
-        <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
+        <SVCURRENTCOMPANY>${companyName.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</SVCURRENTCOMPANY>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
       </STATICVARIABLES>
     </REQUESTDESC></EXPORTDATA></BODY>
@@ -380,7 +378,7 @@ async function fetchTallyLedgers(host, port, companyName) {
     <BODY><EXPORTDATA><REQUESTDESC>
       <REPORTNAME>List of Accounts</REPORTNAME>
       <STATICVARIABLES>
-        <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
+        <SVCURRENTCOMPANY>${companyName.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</SVCURRENTCOMPANY>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
       </STATICVARIABLES>
     </REQUESTDESC></EXPORTDATA></BODY>
@@ -430,20 +428,13 @@ function useTallyGateway(host = "localhost", port = "9000") {
       setCompanies(cos);
       setStatus("ok");
       setLastFetch(new Date());
-      // Fetch ledgers for each company (fire and forget per company)
-      cos.forEach(async (co) => {
-        try {
-          const ledgers = await fetchTallyLedgers(h, p, co.name);
-          if (ledgers) setLedgerMap(m => ({ ...m, [co.name]: ledgers }));
-        } catch { /* ignore per-company ledger errors */ }
-      });
-      // Fetch company details (GSTIN, state, FY) in background
-      cos.forEach(async (co, i) => {
-        try {
-          const details = await fetchTallyCompanyDetails(h, p, co.name);
-          setCompanies(cs => cs.map((c, j) => j === i ? { ...c, ...details } : c));
-        } catch { /* ignore */ }
-      });
+      // Fetch ledgers + details in parallel — using Promise.allSettled to handle errors per company
+      Promise.allSettled(cos.map(co => fetchTallyLedgers(h, p, co.name).then(ledgers => {
+        if (ledgers) setLedgerMap(m => ({ ...m, [co.name]: ledgers }));
+      })));
+      Promise.allSettled(cos.map((co, i) => fetchTallyCompanyDetails(h, p, co.name).then(details => {
+        setCompanies(cs => cs.map((c, j) => j === i ? { ...c, ...details } : c));
+      })));
     } catch (e) {
       if (e.message === "EXTENSION_NOT_READY") {
         // Extension wasn't ready yet — stay idle, the useEffect listener will retry
@@ -542,14 +533,14 @@ const fmtDate = v => {
       const [a, b, c] = p;
       // Detect format: YYYY-MM-DD vs DD-MM-YYYY
       if (a?.length === 4) {
-        // ISO: YYYY-MM-DD
-        d = new Date(`${a}-${String(b).padStart(2,"0")}-${String(c).padStart(2,"0")}`);
+        // ISO: YYYY-MM-DD — use T12:00:00 to avoid timezone day-shift (IST is UTC+5:30)
+        d = new Date(`${a}-${String(b).padStart(2,"0")}-${String(c).padStart(2,"0")}T12:00:00`);
       } else if (c?.length === 4) {
         // Indian: DD-MM-YYYY
-        d = new Date(`${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}`);
+        d = new Date(`${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}T12:00:00`);
       } else {
         // Short year: DD-MM-YY → 20YY
-        d = new Date(`20${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}`);
+        d = new Date(`20${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}T12:00:00`);
       }
     }
   }
@@ -623,18 +614,39 @@ const toTallyXML = (rows, company, fy = "2024-25") => {
     const isDebit = !!r.debit;
     const vtype = r.voucherType || voucherType(r.debit, r.credit, r.ledger);
     return `
-  <VOUCHER REMOTEID="${r.id}" VCHTYPE="${vtype}" ACTION="Create">
-    <DATE>${String(r.date).replace(/[^0-9]/g, "").slice(0,8)}</DATE>
+  <VOUCHER REMOTEID="${(() => {
+    // Stable ID based on content — prevents Tally duplicate on re-import
+    const raw = String(r.date||"") + "|" + String(r.debit||r.credit||"") + "|" + String(r.narration||"").slice(0,40);
+    let h = 5381;
+    for (let i=0;i<raw.length;i++) { h = ((h<<5)+h)+raw.charCodeAt(i); h=h&h; }
+    return "B2T" + Math.abs(h).toString(36).toUpperCase().padStart(8,"0");
+  })()}" VCHTYPE="${vtype}" ACTION="Create">
+    <DATE>${(() => {
+      const raw = String(r.date || "");
+      // Try parsing as Date and format as YYYYMMDD for Tally
+      const months = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
+      // DD-Mon-YYYY (e.g. "21 May 2026" or "21-May-2026")
+      const m1 = raw.match(/(\d{1,2})[\s\-\/]([a-z]{3})[\s\-\/](\d{4})/i);
+      if (m1) return m1[3] + (months[m1[2].toLowerCase()]||"01") + String(m1[1]).padStart(2,"0");
+      // YYYY-MM-DD or YYYY/MM/DD
+      const m2 = raw.match(/^(\d{4})[\-\/\.](\d{1,2})[\-\/\.](\d{1,2})/);
+      if (m2) return m2[1] + String(m2[2]).padStart(2,"0") + String(m2[3]).padStart(2,"0");
+      // DD/MM/YYYY or DD-MM-YYYY
+      const m3 = raw.match(/^(\d{1,2})[\-\/\.](\d{1,2})[\-\/\.](\d{4})/);
+      if (m3) return m3[3] + String(m3[2]).padStart(2,"0") + String(m3[1]).padStart(2,"0");
+      // Fallback: strip non-digits
+      return raw.replace(/[^0-9]/g,"").slice(0,8);
+    })()}</DATE>
     <NARRATION>${(r.narration || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}</NARRATION>
     <VOUCHERTYPENAME>${vtype}</VOUCHERTYPENAME>
     <PARTYLEDGERNAME>${r.ledger}</PARTYLEDGERNAME>
     <ALLLEDGERENTRIES.LIST>
-      <LEDGERNAME>${isDebit ? r.ledger : company.bankLedger || "HDFC Bank"}</LEDGERNAME>
+      <LEDGERNAME>${isDebit ? r.ledger : company.bankLedger || company.name || "Bank Account"}</LEDGERNAME>
       <ISDEEMEDPOSITIVE>${isDebit ? "No" : "Yes"}</ISDEEMEDPOSITIVE>
       <AMOUNT>${isDebit ? amt : -amt}</AMOUNT>
     </ALLLEDGERENTRIES.LIST>
     <ALLLEDGERENTRIES.LIST>
-      <LEDGERNAME>${isDebit ? company.bankLedger || "HDFC Bank" : r.ledger}</LEDGERNAME>
+      <LEDGERNAME>${isDebit ? company.bankLedger || company.name || "Bank Account" : r.ledger}</LEDGERNAME>
       <ISDEEMEDPOSITIVE>${isDebit ? "Yes" : "No"}</ISDEEMEDPOSITIVE>
       <AMOUNT>${isDebit ? -amt : amt}</AMOUNT>
     </ALLLEDGERENTRIES.LIST>
@@ -650,7 +662,7 @@ const toTallyXML = (rows, company, fy = "2024-25") => {
       <REQUESTDESC>
         <REPORTNAME>Vouchers</REPORTNAME>
         <STATICVARIABLES>
-          <SVCURRENTCOMPANY>${company.name}</SVCURRENTCOMPANY>
+          <SVCURRENTCOMPANY>${(company.name||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</SVCURRENTCOMPANY>
         </STATICVARIABLES>
       </REQUESTDESC>
       <REQUESTDATA>${vouchers}
@@ -696,7 +708,6 @@ const RX_HDR    = /date|narr|desc|debit|credit|withdraw|deposit|balance|particul
 
 function isDateStr(s)   { return RX_DATE.test(String(s).trim()); }
 function isAmountStr(s) { const c = String(s).trim().replace(/,/g,""); return RX_AMOUNT.test(c) && !isNaN(parseFloat(c)); }
-function cleanAmt(s)    { return parseFloat(String(s).replace(/[^0-9.\-]/g,"")) || 0; }
 
 // ── Load pdfjs once, share across all parsers ─────────────────────
 async function loadPdfJs() {
@@ -1509,7 +1520,16 @@ function LoginScreen({ onLogin }) {
   const [pendingUser, setPendingUser] = useState(null); // waiting for approval
 
   // ── Login ────────────────────────────────────────────────────────
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [loginLockedUntil, setLoginLockedUntil] = useState(null);
+
   const handleLogin = async () => {
+    // Client-side rate limiting — 5 attempts then 60s lockout
+    if (loginLockedUntil && Date.now() < loginLockedUntil) {
+      const secs = Math.ceil((loginLockedUntil - Date.now()) / 1000);
+      setErr(`Too many failed attempts. Try again in ${secs} seconds.`);
+      return;
+    }
     setErr(""); setSuccess(""); setLoading(true);
     try {
       const session = await sb.signIn(email, pass);
@@ -1530,10 +1550,26 @@ function LoginScreen({ onLogin }) {
         throw new Error("Your account is pending admin approval.");
       }
       if (profile.status === "pending")  { setPendingUser({ ...profile, email: userEmail }); setLoading(false); return; }
+      if (profile.status === "on_hold")  throw new Error("Your account is on hold. Contact admin.");
       if (profile.status === "rejected") throw new Error("Your access request was rejected. Contact admin.");
-      // Merge email from session since profiles table has no email column
-      onLogin({ ...profile, email: userEmail, sessionToken: session.access_token });
-    } catch (e) { setErr(e.message); }
+      // Backfill email into profiles if missing (fixes old accounts)
+      if (!profile.email && userEmail) {
+        try { await sb.update("profiles", { id: userId }, { email: userEmail }); } catch {}
+      }
+      // Normalise role to lowercase DB format
+      const normRole = (profile.role || "user").toLowerCase().trim();
+      onLogin({ ...profile, role: normRole, email: userEmail, sessionToken: session.access_token });
+    } catch (e) {
+      const attempts = loginAttempts + 1;
+      setLoginAttempts(attempts);
+      if (attempts >= 5) {
+        setLoginLockedUntil(Date.now() + 60000);
+        setLoginAttempts(0);
+        setErr('Too many failed attempts. Please wait 60 seconds before trying again.');
+      } else {
+        setErr(e.message + (attempts >= 3 ? ` (${5-attempts} attempts remaining)` : ''));
+      }
+    }
     setLoading(false);
   };
 
@@ -1549,6 +1585,7 @@ function LoginScreen({ onLogin }) {
     if (!regName.trim())         return setErr("Full name is required.");
     if (!regEmail.includes("@")) return setErr("Enter a valid email address.");
     if (regPass.length < 8)      return setErr("Password must be at least 8 characters.");
+    if (!/[0-9!@#$%^&*()_+\-=\[\]{}]/.test(regPass)) return setErr("Password must contain at least one number or special character.");
     if (regPass !== regPass2)    return setErr("Passwords do not match.");
     setLoading(true);
     try {
@@ -1562,12 +1599,13 @@ function LoginScreen({ onLogin }) {
       if (userId) {
         try {
           await sb.insert("profiles", {
-            id: userId,
-            name: regName.trim(),
-            role: "user",
+            id:      userId,
+            name:    regName.trim(),
+            email:   regEmail.trim().toLowerCase(),   // store email so admin can see it
+            role:    "user",                          // always "user" — DB constraint safe
             company: regCompany.trim(),
-            status: "pending",
-            avatar: regName.trim().slice(0,2).toUpperCase(),
+            status:  "pending",
+            avatar:  regName.trim().slice(0,2).toUpperCase(),
           });
           // Insert approval request so admin can see it
           await sb.insert("approval_requests", {
@@ -2050,6 +2088,11 @@ function UploadScreen({ onParsed, selectedCompanies, setSelectedCompanies, tally
   const fileRef = useRef();
 
   const handleFile = useCallback(async (file) => {
+    // 50MB limit — large PDFs crash the browser tab
+    if (file.size > 50 * 1024 * 1024) {
+      setError({ code: "ERR_001", message: `File too large (${(file.size/1024/1024).toFixed(1)} MB). Maximum is 50 MB. For large bank statements, split the PDF into smaller date ranges or export as Excel/CSV.` });
+      return;
+    }
     setError(null); setLoading(true); setPdfStatus("");
     try {
       const result = await parseFile(file, (msg) => setPdfStatus(msg));
@@ -3090,34 +3133,74 @@ function UserManagementScreen({ adminUser }) {
   const [addLoading, setAddLoading] = useState(false);
   const [tab, setTab] = useState("users");
 
-  const ROLES = ["user","Accountant","CA","admin"];
+  // ── Role definitions ─────────────────────────────────────────────
+  // DB values MUST match Supabase profiles_role_check constraint.
+  // Current constraint (inferred from error): CHECK (role IN ('admin','user','accountant','ca'))
+  // If you get constraint errors, run in Supabase SQL editor:
+  //   ALTER TABLE profiles DROP CONSTRAINT profiles_role_check;
+  //   ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
+  //     CHECK (role IN ('admin','user','accountant','ca'));
+  const DB_ROLES    = ["user","accountant","ca","admin"];
+  const ROLE_LABELS = { user:"User", accountant:"Accountant", ca:"CA", admin:"Admin" };
+  const ROLES       = DB_ROLES;
+  // Normalise any legacy mixed-case role to lowercase DB format
+  const toDbRole   = r => (r||"user").toLowerCase().trim();
+  const fromDbRole = r => ROLE_LABELS[String(r||"").toLowerCase()] || r || "user";
+
   const statusColor = s => s==="approved"?"green":s==="pending"?"amber":s==="on_hold"?"purple":s==="rejected"?"red":"gray";
-  const roleColor   = r => r==="admin"?"red":r==="CA"?"purple":r==="Accountant"?"blue":"gray";
+  const roleColor   = r => { const n=String(r||"").toLowerCase(); return n==="admin"?"red":n==="ca"?"purple":n==="accountant"?"blue":"gray"; };
 
   const notify = (msg, type="success") => {
     setToast_({ msg, type });
     setTimeout(() => setToast_(t => t.msg===msg?{msg:"",type:"success"}:t), 3500);
   };
 
-  // ── Load all profiles ──────────────────────────────────────────
+  // ── Load all profiles + backfill missing emails ────────────────
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const profiles = await sb.from("profiles", "select=*&order=created_at.asc");
-      // Try to get emails from auth admin endpoint (best-effort)
+      const profiles = await sb.from("profiles", "select=*&order=created_at.asc&limit=500");
+
+      // Fetch emails from auth admin endpoint (requires admin JWT, best-effort)
       let authEmailMap = {};
       try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1000`, {
-          headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${sb._token||SUPABASE_ANON}` }
+          headers: {
+            "apikey": SUPABASE_ANON,
+            "Authorization": `Bearer ${sb._token||SUPABASE_ANON}`,
+            "Content-Type": "application/json",
+          }
         });
-        if (res.ok) { const d=await res.json(); (d.users||d||[]).forEach(u=>{ if(u.id&&u.email) authEmailMap[u.id]=u.email; }); }
+        if (res.ok) {
+          const d = await res.json();
+          (d.users||d||[]).forEach(u => { if(u.id&&u.email) authEmailMap[u.id]=u.email; });
+        }
       } catch {}
-      setUsers(profiles.map(p => ({
+
+      // Also get current signed-in user's own email as a guaranteed source
+      try {
+        const me = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: { "apikey": SUPABASE_ANON, "Authorization": `Bearer ${sb._token}` }
+        });
+        if (me.ok) { const d=await me.json(); if(d.id&&d.email) authEmailMap[d.id]=d.email; }
+      } catch {}
+
+      const enriched = profiles.map(p => ({
         ...p,
         email:   p.email || authEmailMap[p.id] || "",
+        role:    p.role || "user",
         avatar:  p.avatar || (p.name||"?").slice(0,2).toUpperCase(),
         company: (p.company && isNaN(String(p.company).trim())) ? p.company : "",
-      })));
+        _emailMissing: !p.email && !authEmailMap[p.id],
+      }));
+
+      // Auto-backfill: write resolved emails back to profiles table so future loads work
+      const needsBackfill = enriched.filter(p => !profiles.find(x=>x.id===p.id)?.email && p.email);
+      for (const p of needsBackfill) {
+        try { await sb.update("profiles", { id: p.id }, { email: p.email }); } catch {}
+      }
+
+      setUsers(enriched);
     } catch (e) { notify("Error loading users: "+e.message, "error"); }
     setLoading(false);
   }, []);
@@ -3145,20 +3228,32 @@ function UserManagementScreen({ adminUser }) {
 
   // ── Change Role ────────────────────────────────────────────────
   const changeRole = async (u, role) => {
-    if (role === u.role) return;
+    const dbRole = toDbRole(role);
+    if (dbRole === toDbRole(u.role)) return;
     setActioning(u.id);
     try {
-      await sb.update("profiles", { id: u.id }, { role, updated_at: new Date().toISOString() });
-      patchUser(u.id, { role });
-      notify(`${u.name}'s role changed to ${role}`);
-    } catch (e) { notify("Role change error: "+e.message, "error"); }
+      await sb.update("profiles", { id: u.id }, { role: dbRole, updated_at: new Date().toISOString() });
+      patchUser(u.id, { role: dbRole });
+      notify(`${u.name}'s role changed to ${fromDbRole(dbRole)}`);
+    } catch (e) {
+      if (e.message?.includes("role_check") || e.message?.includes("check constraint")) {
+        notify(
+          `DB constraint error — run this SQL in Supabase:\n` +
+          `ALTER TABLE profiles DROP CONSTRAINT profiles_role_check;\n` +
+          `ALTER TABLE profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('admin','user','accountant','ca'));`,
+          "error"
+        );
+      } else {
+        notify("Role change error: "+e.message, "error");
+      }
+    }
     setActioning(null);
   };
 
   // ── Edit / Save Profile ────────────────────────────────────────
   const openEditUser = (u) => {
     setEditUser(u);
-    setEditForm({ name: u.name||"", company: u.company||"", role: u.role||"user", status: u.status||"approved" });
+    setEditForm({ name: u.name||"", company: u.company||"", role: toDbRole(u.role||"user"), status: u.status||"approved" });
     setEditErr("");
   };
 
@@ -3169,7 +3264,7 @@ function UserManagementScreen({ adminUser }) {
       const payload = {
         name:       editForm.name.trim(),
         company:    editForm.company.trim(),
-        role:       editForm.role,
+        role:       toDbRole(editForm.role),   // normalise to DB lowercase
         status:     editForm.status,
         avatar:     editForm.name.trim().slice(0,2).toUpperCase(),
         updated_at: new Date().toISOString(),
@@ -3222,19 +3317,24 @@ function UserManagementScreen({ adminUser }) {
     if (!addForm.name.trim())         return setAddErr("Name is required.");
     if (!addForm.email.includes("@")) return setAddErr("Valid email required.");
     if (addForm.password.length < 8)  return setAddErr("Password must be at least 8 characters.");
+    // Check if email already exists in profiles
     setAddLoading(true);
     try {
+      const existing = await sb.from("profiles", `email=eq.${encodeURIComponent(addForm.email.trim().toLowerCase())}&select=id`);
+      if (existing && existing.length > 0) { setAddErr("A user with this email already exists."); setAddLoading(false); return; }
+    } catch {}
+    try {
+      const dbRole = toDbRole(addForm.role);
       const session = await sb.signUp(addForm.email, addForm.password, {
-        name: addForm.name.trim(), role: addForm.role, company: addForm.company.trim(),
+        name: addForm.name.trim(), role: dbRole, company: addForm.company.trim(),
       });
       const userId = session.user?.id;
       if (!userId) throw new Error("User created but no ID returned — check Supabase email confirmation settings.");
-      // Upsert profile — include email so it's stored
       await sb.insert("profiles", {
         id:      userId,
         name:    addForm.name.trim(),
-        email:   addForm.email.trim().toLowerCase(),   // ← FIX: store email in profiles
-        role:    addForm.role,
+        email:   addForm.email.trim().toLowerCase(),
+        role:    dbRole,                               // always lowercase to satisfy constraint
         company: addForm.company.trim(),
         status:  "approved",
         avatar:  addForm.name.trim().slice(0,2).toUpperCase(),
@@ -3272,8 +3372,31 @@ function UserManagementScreen({ adminUser }) {
           <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#eef2ff 50%,#3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>User Management</h2>
           <p style={{ color:T.textMid, fontSize:13, marginTop:3 }}>Admin-only panel · full user control</p>
         </div>
-        {tab==="users" && <Btn icon="+" onClick={()=>setAddModal(true)}>Add User</Btn>}
+        <div style={{ display:"flex", gap:8 }}>
+          {/* Backfill Emails — fixes users created before email was stored in profiles */}
+          {users.some(u => u._emailMissing) && (
+            <Btn size="sm" variant="ghost" icon="✉" onClick={async () => {
+              notify("Fetching emails from auth…", "success");
+              await loadUsers();
+              notify("Email backfill complete — refresh to verify", "success");
+            }}>Backfill Emails ({users.filter(u=>u._emailMissing).length})</Btn>
+          )}
+          {tab==="users" && <Btn icon="+" onClick={()=>setAddModal(true)}>Add User</Btn>}
+        </div>
       </div>
+
+      {/* ── SQL Migration Notice (shown once if constraint error is likely) ── */}
+      {users.some(u => u.role && !["admin","user","accountant","ca"].includes(String(u.role).toLowerCase())) && (
+        <div style={{ background:T.amberDim, border:`1px solid ${T.amber}44`, borderRadius:10, padding:"12px 16px", marginBottom:16, fontSize:12, color:T.amber, lineHeight:1.7 }}>
+          ⚠ <strong>Role constraint mismatch detected.</strong> Some users have roles not allowed by your DB constraint.<br/>
+          Run this SQL once in <strong>Supabase → SQL Editor</strong> to fix:
+          <pre style={{ background:"rgba(0,0,0,0.3)", borderRadius:6, padding:"8px 12px", marginTop:8, fontSize:11, color:T.text, overflowX:"auto", userSelect:"all" }}>
+{`ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
+  CHECK (role IN ('admin','user','accountant','ca'));`}
+          </pre>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display:"flex", background:T.surface, borderRadius:11, padding:4, marginBottom:20, border:`1px solid ${T.border}`, width:"fit-content", gap:2 }}>
@@ -3356,7 +3479,7 @@ function UserManagementScreen({ adminUser }) {
                 {/* Company */}
                 <div style={{ fontSize:12, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.company||<span style={{color:T.textDim}}>—</span>}</div>
                 {/* Role */}
-                <div><Pill color={roleColor(u.role)} size="xs">{u.role||"user"}</Pill></div>
+                <div><Pill color={roleColor(u.role)} size="xs">{fromDbRole(u.role)}</Pill></div>
                 {/* Status */}
                 <div><Pill color={statusColor(u.status)} size="xs" dot>{u.status||"unknown"}</Pill></div>
                 {/* Actions */}
@@ -3387,10 +3510,10 @@ function UserManagementScreen({ adminUser }) {
                   </button>
                   {/* Change Role inline */}
                   <select title="Change Role" disabled={actioning===u.id||u.id===adminUser.id}
-                    value={u.role||"user"}
+                    value={toDbRole(u.role||"user")}
                     onChange={e => changeRole(u, e.target.value)}
                     style={{ padding:"4px 6px", borderRadius:7, fontSize:11, fontFamily:T.font, border:`1px solid ${T.border}`, background:T.surface, color:T.textMid, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1, cursor:"pointer" }}>
-                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                    {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]||r}</option>)}
                   </select>
                   {/* Delete */}
                   <button title="Delete User" disabled={actioning===u.id||u.id===adminUser.id}
@@ -3463,7 +3586,7 @@ function UserManagementScreen({ adminUser }) {
                 <div style={{ fontSize:17, fontWeight:700, color:T.text, marginBottom:4 }}>{viewUser.name}</div>
                 <div style={{ fontSize:12, color:T.textDim, marginBottom:6 }}>{viewUser.email||<span style={{fontStyle:"italic"}}>no email on file</span>}</div>
                 <div style={{ display:"flex", gap:6 }}>
-                  <Pill color={roleColor(viewUser.role)} size="xs">{viewUser.role||"user"}</Pill>
+                  <Pill color={roleColor(viewUser.role)} size="xs">{fromDbRole(viewUser.role)}</Pill>
                   <Pill color={statusColor(viewUser.status)} size="xs" dot>{viewUser.status||"unknown"}</Pill>
                 </div>
               </div>
@@ -3556,7 +3679,7 @@ function UserManagementScreen({ adminUser }) {
             <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Role</label>
             <select value={addForm.role} onChange={e=>setAddForm(f=>({...f,role:e.target.value}))}
               style={{ width:"100%", padding:"9px 12px", borderRadius:8, fontSize:13, border:`1px solid ${T.border}`, background:T.surface, color:T.text }}>
-              {ROLES.map(r=><option key={r} value={r}>{r}</option>)}
+              {ROLES.map(r=><option key={r} value={r}>{ROLE_LABELS[r]||r}</option>)}
             </select>
           </div>
           <div>
@@ -3580,7 +3703,33 @@ function UserManagementScreen({ adminUser }) {
 // ══════════════════════════════════════════════════════════════════
 const INITIAL_HISTORY = []; // No demo data — each user sees only their own imports
 
-export default function App() {
+// ── Error Boundary — catches uncaught render errors ──────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error("Bank2Tally render error:", error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight:"100vh", background:"#080b12", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"sans-serif", color:"#eef2ff" }}>
+          <div style={{ maxWidth:480, textAlign:"center", padding:32 }}>
+            <div style={{ fontSize:48, marginBottom:16 }}>⚠</div>
+            <h2 style={{ fontSize:20, fontWeight:700, marginBottom:12, color:"#ff4f6a" }}>Something went wrong</h2>
+            <p style={{ color:"#8896b3", lineHeight:1.7, marginBottom:20 }}>{this.state.error?.message || "An unexpected error occurred."}</p>
+            <button onClick={() => { this.setState({ error:null }); window.location.reload(); }}
+              style={{ padding:"10px 24px", background:"#3d7fff", color:"#fff", border:"none", borderRadius:8, fontSize:14, fontWeight:600, cursor:"pointer" }}>
+              Reload App
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+
+function AppInner() {
   const [user, setUser] = useState(null);
   const [screen, setScreen] = useState(SCREENS.LOGIN);
   const [headers, setHeaders] = useState([]);
@@ -3623,7 +3772,13 @@ export default function App() {
       });
       // If some entries were purged, save the cleaned list
       if (fresh.length !== parsed.length) {
-        localStorage.setItem(key, JSON.stringify(fresh));
+        try { localStorage.setItem(key, JSON.stringify(fresh)); } catch (e) {
+        // Storage full or private mode — remove oldest entry and retry
+        try {
+          const keys = Object.keys(localStorage).filter(k=>k.startsWith("b2t_hist_"));
+          if (keys.length) { localStorage.removeItem(keys[0]); localStorage.setItem(key, JSON.stringify(fresh)); }
+        } catch {}
+      }
       }
       setHistory(fresh);
     } catch { setHistory([]); }
@@ -3698,10 +3853,15 @@ export default function App() {
       const restoreFromSession = (profile) => {
         const meta = session.user.user_metadata || {};
         const name = profile?.name || meta.name || session.user.email.split("@")[0];
-        const role = profile?.role || meta.role || "user";
+        const role = (profile?.role || meta.role || "user").toLowerCase().trim();
         const status = profile?.status || (role === "admin" ? "approved" : "pending");
         const avatar = profile?.avatar || name.slice(0,2).toUpperCase();
-        if (status !== "approved") { localStorage.removeItem("sb_session"); return; }
+        if (status !== "approved" && status !== "on_hold") { localStorage.removeItem("sb_session"); return; }
+        if (status === "on_hold") { localStorage.removeItem("sb_session"); return; }
+        // Backfill email into profile if missing
+        if (profile && !profile.email && session.user.email) {
+          try { await sb.update("profiles", { id: session.user.id }, { email: session.user.email }); } catch {}
+        }
         setUser({ id: session.user.id, name, role, status, avatar, company: profile?.company || "", email: session.user.email, sessionToken: session.access_token });
         setScreen(SCREENS.DASHBOARD);
         if (role === "admin") {
@@ -3934,7 +4094,7 @@ export default function App() {
               <div style={{ width:32, height:32, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#fff" }}>{user.avatar}</div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
-                <div style={{ fontSize:10, color:T.textDim }}>{user.role}</div>
+                <div style={{ fontSize:10, color:T.textDim }}>{fromDbRole(user.role)}</div>
               </div>
             </div>
             <button onClick={onLogout}
@@ -3959,5 +4119,14 @@ export default function App() {
         </div>
       </div>
     </>
+  );
+}
+
+// Wrap with ErrorBoundary so any uncaught render error shows a recovery screen
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   );
 }
