@@ -838,130 +838,145 @@ function linesToText(lines, pageWidth) {
 }
 
 // ── ICICI Bank Statement ─────────────────────────────────────────
-// Handles TWO distinct ICICI PDF layouts detected by page width:
-//
-// FORMAT A — "Detailed Statement" / OpTransactionHistory (900pt wide):
-//   No ~15 | TxnID ~39 | ValueDate ~109 | PostedDate ~184 | Cheque ~369
-//   Description ~417 | Cr/Dr ~704 | Amount ~766 | Balance ~829
-//   Quirk: balance appears ABOVE the row (prior balance shown first),
-//           S.no and TxnID are on different Y lines within same block
+// FORMAT A — "Detailed Statement" (900pt wide, OpTransactionHistory):
+//   Layout per transaction (3 Y levels, ~8pt apart):
+//     Y+0:  valDate(108) | postedDate(184) | desc(417) | prevBalance(829)  ← balance belongs to PREV row
+//     Y+7:  sno(15) | txnId(43) | cheque(369) | [desc cont] | crdr(704) | amount(780)
+//     Y+14: [desc continuation lines at x=417]
+//   The balance shown at Y+0 is the RUNNING balance BEFORE this transaction.
+//   So we carry it forward: balance[n] = prevBalance line of row[n+1].
 //
 // FORMAT B — "Account Statement" A4 (595pt wide, 2024+ Current Account):
-//   S.no ~50 | TxnID ~94 | Date ~162 | Cheque ~280 | Description ~296
-//   Withdrawal ~350 | Deposit ~430 | Balance ~490
-//   Quirk: date split across 2 lines "04-May-" / "2026"
+//   Layout per transaction (first line + continuation lines):
+//     Y+0:  sno(50) | txnId(94) | date(161) | desc(296) | debit(363) | credit(430) | balance(497)
+//     Y+12: date-year(161) | desc-cont(296)
+//     Y+24: desc-cont(296)  ...
 function parseICICIWords(pages) {
   if (!pages.length) return null;
   const pageWidth = pages[0].width || 595;
 
   // ═══════════════════════════════════════════════════════════════
-  // FORMAT A — Old wide "Detailed Statement" (900pt)
+  // FORMAT A — Wide "Detailed Statement" (900pt)
   // ═══════════════════════════════════════════════════════════════
   if (pageWidth > 700) {
-    const BANDS_A = [
-      { name:"sno",     lo:0,    hi:36   },
-      { name:"txnid",   lo:36,   hi:108  },
-      { name:"valdate", lo:108,  hi:183  },
-      { name:"posted",  lo:183,  hi:365  },
-      { name:"cheque",  lo:365,  hi:415  },
-      { name:"desc",    lo:415,  hi:695  },
-      { name:"crdr",    lo:695,  hi:760  },
-      { name:"amount",  lo:760,  hi:825  },
-      { name:"balance", lo:825,  hi:9999 },
-    ];
-    const snapA = x => (BANDS_A.find(b => x >= b.lo && x < b.hi) || BANDS_A[BANDS_A.length-1]).name;
+    // Exact X bands from measured PDF
+    const col = x =>
+      x < 36   ? "sno"     :
+      x < 108  ? "txnid"   :
+      x < 183  ? "valdate" :
+      x < 365  ? "posted"  :
+      x < 415  ? "cheque"  :
+      x < 695  ? "desc"    :
+      x < 760  ? "crdr"    :
+      x < 825  ? "amount"  : "balance";
 
-    const rows = [];
-    let cur = null;
+    // Group all items into physical lines (2pt tolerance)
+    const allItems = pages.flatMap(p => p.items);
+    const physLines = groupIntoLines(allItems, 2);
 
-    const flushA = () => {
-      if (!cur) return;
-      if (!cur.valdate || (!cur.amount && !cur.balance)) { cur = null; return; }
-      const debit  = cur.crdr === "DR" ? cur.amount : "";
-      const credit = cur.crdr === "CR" ? cur.amount : "";
-      rows.push([cur.valdate, cur.txnid, cur.desc.join(" ").trim(), debit, credit, cur.balance]);
-      cur = null;
+    // Each transaction block spans ~3 Y-lines:
+    //   line A (date/desc/prevBalance), line B (sno/txnid/crdr/amount), line C+ (desc cont)
+    // We identify transaction starts by: line has valdate AND NO sno
+    // Then the NEXT line with sno/txnid gives us the ID and amount.
+    // Balance at line A = balance AFTER the previous transaction, i.e. opening for this one.
+    // We instead use the balance from line A of the NEXT transaction as closing balance.
+
+    const rows = []; // {valdate, txnid, desc[], crdr, amount, balance(running after)}
+    let pending = null; // transaction being built
+    let pendingBalance = ""; // balance line seen BEFORE current transaction
+
+    const flushPending = (closingBal) => {
+      if (!pending) return;
+      if (!pending.valdate || !pending.amount) { pending = null; return; }
+      const debit  = pending.crdr === "DR" ? pending.amount : "";
+      const credit = pending.crdr === "CR" ? pending.amount : "";
+      rows.push([
+        pending.valdate,
+        pending.txnid,
+        pending.desc.filter(Boolean).join(" ").trim(),
+        debit,
+        credit,
+        closingBal || pending.balance
+      ]);
+      pending = null;
     };
 
-    pages.forEach(({ items }) => {
-      if (!items.length) return;
-      const physLines = groupIntoLines(items, 2);
+    physLines.forEach(line => {
+      const txt = line.items.map(i => i.str).join(" ");
+      // Skip header/footer
+      if (/detailed statement|transactions list|no\.\s*transact|value date|txn posted|generated on|page \d|legends|bbps|bctt|^bil |^bpay/i.test(txt)) return;
 
-      physLines.forEach(line => {
-        const lineText = line.items.map(it => it.str).join(" ");
-        // Skip headers/footers/legend
-        if (/detailed statement|transactions list|no\.\s*transact|value date|txn posted|generated on|page \d|legends used|^bbps|^bctt|^bil |^bpay/i.test(lineText)) return;
+      const slots = { sno:[], txnid:[], valdate:[], posted:[], cheque:[], desc:[], crdr:[], amount:[], balance:[] };
+      line.items.forEach(it => { const c = col(it.x); slots[c].push(it.str.trim()); });
 
-        const slots = { sno:[], txnid:[], valdate:[], posted:[], cheque:[], desc:[], crdr:[], amount:[], balance:[] };
-        line.items.forEach(it => { const col = snapA(it.x); slots[col].push(it.str.trim()); });
+      const valdate = slots.valdate.find(isDateStr) || "";
+      const txnid   = slots.txnid.join("").trim();
+      const sno     = slots.sno.join("").trim();
+      const desc    = slots.desc.filter(s => s && s !== "-").join(" ").trim();
+      const crdr    = slots.crdr.join("").trim().toUpperCase();
+      const amount  = slots.amount.find(isAmountStr) || "";
+      const balance = slots.balance.find(isAmountStr) || "";
 
-        const sno     = slots.sno.join("").trim();
-        const txnid   = slots.txnid.join("").trim();
-        const valdate = slots.valdate.find(isDateStr) || "";
-        const desc    = slots.desc.filter(s=>s&&s!=="-").join(" ").trim();
-        const crdr    = slots.crdr.join("").trim().toUpperCase();
-        const amount  = slots.amount.find(isAmountStr) || "";
-        const balance = slots.balance.find(isAmountStr) || "";
+      // A line with balance but no date/txnid = running balance header line
+      // This is the CLOSING balance of the previous transaction
+      if (balance && !valdate && !txnid && !sno) {
+        if (pending) pending.balance = balance; // assign as closing to pending
+        pendingBalance = balance;
+        return;
+      }
 
-        // A row with a balance but no valdate = opening/running balance line → skip
-        if (!valdate && !txnid && balance && !amount) return;
+      // Line with valdate = start of new transaction block
+      if (valdate) {
+        // The balance on THIS line is actually the closing balance of the PREVIOUS tx
+        flushPending(balance || pendingBalance);
+        pending = { valdate, txnid, desc: desc ? [desc] : [], crdr, amount, balance: "" };
+        pendingBalance = "";
+        return;
+      }
 
-        // New transaction: has valdate OR txnid starting with S
-        if (valdate || /^S\d{5,}/i.test(txnid)) {
-          flushA();
-          cur = { sno, txnid, valdate, desc: desc ? [desc] : [], crdr, amount, balance };
-          return;
+      // Line with sno/txnid (the identification line, 7pt below date line)
+      if (/^S\d{5,}/i.test(txnid) || /^\d{1,4}$/.test(sno)) {
+        if (pending) {
+          if (!pending.txnid && txnid) pending.txnid = txnid;
+          if (!pending.crdr && crdr)   pending.crdr   = crdr;
+          if (!pending.amount && amount) pending.amount = amount;
+          if (desc) pending.desc.push(desc);
         }
+        return;
+      }
 
-        // Continuation line
-        if (cur) {
-          if (!cur.txnid && /^S\d{5,}/i.test(txnid)) cur.txnid = txnid;
-          if (!cur.valdate && valdate) cur.valdate = valdate;
-          if (desc) cur.desc.push(desc);
-          if (!cur.crdr && crdr) cur.crdr = crdr;
-          if (!cur.amount && amount) cur.amount = amount;
-          if (!cur.balance && balance) cur.balance = balance;
-        }
-      });
+      // Continuation desc line
+      if (pending && desc) pending.desc.push(desc);
+      if (pending && !pending.crdr && crdr)     pending.crdr   = crdr;
+      if (pending && !pending.amount && amount)  pending.amount = amount;
     });
-    flushA();
 
-    const HDR_A = ["Value Date","Transaction ID","Description","Withdrawal (Dr)","Deposit (Cr)","Available Balance"];
-    return rows.length ? { headers: HDR_A, rows, _bankHint: "icici" } : null;
+    flushPending("");
+
+    const HDR = ["Value Date","Transaction ID","Description","Withdrawal (Dr)","Deposit (Cr)","Available Balance"];
+    return rows.length ? { headers: HDR, rows, _bankHint: "icici" } : null;
   }
 
   // ═══════════════════════════════════════════════════════════════
   // FORMAT B — New A4 "Account Statement" (595pt wide, 2024+)
   // ═══════════════════════════════════════════════════════════════
-  const BANDS_B = [
-    { name:"sno",     lo:40,   hi:88   },
-    { name:"txnid",   lo:88,   hi:155  },
-    { name:"date",    lo:155,  hi:296  },
-    { name:"cheque",  lo:296,  hi:350  },
-    { name:"desc",    lo:350,  hi:430  },  // actual desc x≈296 but cheque col is blank so desc spills
-    { name:"debit",   lo:430,  hi:465  },
-    { name:"credit",  lo:465,  hi:492  },
-    { name:"balance", lo:492,  hi:9999 },
-  ];
-  // Override: desc starts at 296 and debit at 350
-  const BANDS_B2 = [
-    { name:"sno",     lo:40,   hi:88   },
-    { name:"txnid",   lo:88,   hi:155  },
-    { name:"date",    lo:155,  hi:280  },
-    { name:"cheque",  lo:280,  hi:296  },
-    { name:"desc",    lo:296,  hi:350  },
-    { name:"debit",   lo:350,  hi:430  },
-    { name:"credit",  lo:430,  hi:490  },
-    { name:"balance", lo:490,  hi:9999 },
-  ];
-  const snapB = x => (BANDS_B2.find(b => x >= b.lo && x < b.hi) || BANDS_B2[BANDS_B2.length-1]).name;
+  // Exact X bands from measured PDF
+  const colB = x =>
+    x < 88   ? "sno"     :
+    x < 155  ? "txnid"   :
+    x < 296  ? "date"    :  // 161–296 (date col + cheque col, cheque always blank)
+    x < 358  ? "desc"    :  // 296–358
+    x < 427  ? "debit"   :  // 358–427  (Withdrawal Dr, measured at 363)
+    x < 494  ? "credit"  :  // 427–494  (Deposit Cr, measured at 430 and 446)
+               "balance";   // 494+     (measured at 497)
 
-  const MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
+  const MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
+                  jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
   const normDate = parts => {
-    const s = parts.join("").replace(/\s+/g,"");
+    const s = parts.join("").replace(/\s+/g, "");
     const m = s.match(/^(\d{1,2})[-\/](\w{3,})[-\/](\d{2,4})$/i);
     if (!m) return s;
-    const mo = MONTHS[m[2].toLowerCase().slice(0,3)] || m[2];
+    const mo = MONTHS[m[2].toLowerCase().slice(0, 3)] || m[2];
     return `${m[1].padStart(2,"0")}/${mo}/${m[3]}`;
   };
 
@@ -982,11 +997,11 @@ function parseICICIWords(pages) {
     const physLines = groupIntoLines(items, 2);
 
     physLines.forEach(line => {
-      const lineText = line.items.map(it=>it.str).join(" ");
-      if (/generated on|page \d+|statement of transactions|legends used|account (name|number|type|currency)|ifsc|customer id|available balance|total effective|s\.no.*transaction|bbps|bctt/i.test(lineText)) return;
+      const txt = line.items.map(i => i.str).join(" ");
+      if (/generated on|page \d+\s+of|statement of transactions|legends used|account (name|number|type|currency)|ifsc|customer id|available balance.*total|total effective|s\.no.*transaction|bbps|bctt/i.test(txt)) return;
 
-      const slots = { sno:[], txnid:[], date:[], cheque:[], desc:[], debit:[], credit:[], balance:[] };
-      line.items.forEach(it => { const col = snapB(it.x); slots[col].push(it.str.trim()); });
+      const slots = { sno:[], txnid:[], date:[], desc:[], debit:[], credit:[], balance:[] };
+      line.items.forEach(it => { const c = colB(it.x); slots[c].push(it.str.trim()); });
 
       const sno    = slots.sno.join("").trim();
       const txnid  = slots.txnid.join("").trim();
@@ -996,11 +1011,21 @@ function parseICICIWords(pages) {
       const credit = slots.credit.find(isAmountStr) || "";
       const bal    = slots.balance.find(isAmountStr) || "";
 
+      // New row: serial number + transaction ID on same line
       if (/^\d{1,4}$/.test(sno) && /^S\d{5,}/i.test(txnid)) {
         flushB();
-        curB = { txnid, dateParts: dateTk ? [dateTk] : [], desc: desc ? [desc] : [], debit, credit, balance: bal };
+        curB = {
+          txnid,
+          dateParts: dateTk ? [dateTk] : [],
+          desc: desc ? [desc] : [],
+          debit,
+          credit,
+          balance: bal
+        };
         return;
       }
+
+      // Continuation line
       if (curB) {
         if (dateTk && !isAmountStr(dateTk)) curB.dateParts.push(dateTk);
         if (desc)   curB.desc.push(desc);
