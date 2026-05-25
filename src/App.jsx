@@ -506,7 +506,7 @@ const BANK_TEMPLATES = {
   union:   { name:"Union Bank",    cols:{ date:"Date",              narration:"Narration",            debit:"Debit Amount",           credit:"Credit Amount",          balance:"Balance",              ref:"Reference Number" }},
   // ── Private Sector ─────────────────────────────────────────────
   hdfc:    { name:"HDFC Bank",     cols:{ date:"Date",              narration:"Narration",            debit:"Withdrawal Amt.",        credit:"Deposit Amt.",           balance:"Closing Balance",      ref:"Chq./Ref.No." }},
-  icici:   { name:"ICICI Bank",    cols:{ date:"Transaction Date",  narration:"Transaction Remarks",  debit:"Withdrawal Amount (INR )",credit:"Deposit Amount (INR )", balance:"Balance (INR )",       ref:"S No." }},
+  icici:   { name:"ICICI Bank",    cols:{ date:"Value Date",         narration:"Description",          debit:"Withdrawal (Dr)",        credit:"Deposit (Cr)",           balance:"Available Balance",    ref:"Transaction ID" }},
   axis:    { name:"Axis Bank",     cols:{ date:"Tran Date",         narration:"PARTICULARS",          debit:"DR",                     credit:"CR",                     balance:"BAL",                  ref:"CHQNO" }},
   kotak:   { name:"Kotak Bank",    cols:{ date:"Transaction Date",  narration:"Description",          debit:"Debit Amount",           credit:"Credit Amount",          balance:"Balance",              ref:"Reference No" }},
   yes:     { name:"Yes Bank",      cols:{ date:"Date",              narration:"Transaction Details",  debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Reference Number" }},
@@ -2988,10 +2988,10 @@ function ColumnMapScreen({ headers, templateKey, onMapped, onBack }) {
 
       // DEBIT — withdrawal / debit (not combined)
       const isCombined = /^(amount|txnamount|crdr|drcr|cr\/dr|dr\/cr)$/.test(hn) || (hn.includes("cr")&&hn.includes("dr")&&!hn.includes("credit")&&!hn.includes("debit"));
-      if (!m.debit && !isCombined && /debit|withdraw|paid|dr(?!aft)/.test(hn)) m.debit = h;
+      if (!m.debit && !isCombined && (/debit|withdraw|paid/.test(hn) || /\(dr\)$/.test(hn))) m.debit = h;
 
       // CREDIT — deposit / credit (not combined)
-      if (!m.credit && !isCombined && /credit|deposit|received|cr(?!eate)/.test(hn)) m.credit = h;
+      if (!m.credit && !isCombined && (/credit|deposit|received/.test(hn) || /\(cr\)$/.test(hn))) m.credit = h;
 
       // BALANCE
       if (!m.balance && /balance|bal(?!ance)?$/.test(hn)) m.balance = h;
@@ -4589,6 +4589,11 @@ function AppInner() {
     // Score = number of template column names that fuzzy-match a real header.
     // Highest score wins.
     let resolvedKey = tmplKey || "";
+    // ── Step 1: Trust the parser's own bank hint (most reliable) ──────
+    if (!resolvedKey && result._bankHint && BANK_TEMPLATES[result._bankHint]) {
+      resolvedKey = result._bankHint;
+    }
+    // ── Step 2: Score templates against actual headers (fallback) ─────
     if (!resolvedKey) {
       const norm = s => s.toLowerCase().replace(/[\s_\-\.\(\)\/,]/g,"");
       const hNorms = result.headers.map(h => norm(h));
