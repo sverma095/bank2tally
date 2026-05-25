@@ -138,6 +138,21 @@ const sb = {
       body: JSON.stringify(payload),
     });
   },
+  // Auth: update password for the currently authenticated user (used after recovery link)
+  async updatePassword(newPassword) {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_ANON,
+        "Authorization": `Bearer ${sb._token}`,
+      },
+      body: JSON.stringify({ password: newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || data.message || "Failed to update password.");
+    return data;
+  },
 };
 
 // ── Design Tokens ────────────────────────────────────────────────
@@ -1579,6 +1594,42 @@ function LoginScreen({ onLogin }) {
   const [verifyStep,  setVerifyStep]  = useState(false); // show "check email" screen
   const [pendingReg,  setPendingReg]  = useState(null);  // holds reg data
 
+  // ── Password recovery (from email link) ────────────────────────
+  const [recoveryToken, setRecoveryToken] = useState(null); // access_token from URL hash
+  const [newPass,       setNewPass]       = useState("");
+  const [newPass2,      setNewPass2]      = useState("");
+  const [resetDone,     setResetDone]     = useState(false);
+
+  useEffect(() => {
+    // Supabase puts #access_token=...&type=recovery in the URL when the user
+    // clicks the password-reset email link. Detect it here and switch to the
+    // set-new-password form instead of showing the normal login screen.
+    const hash = window.location.hash;
+    if (!hash) return;
+    const params = new URLSearchParams(hash.replace(/^#/, ""));
+    if (params.get("type") === "recovery" && params.get("access_token")) {
+      const token = params.get("access_token");
+      sb._token = token; // authenticate the sb client with this one-time token
+      setRecoveryToken(token);
+      // Clean the URL so a refresh doesn't re-trigger recovery mode
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  const handleSetNewPassword = async () => {
+    setErr(""); setSuccess("");
+    if (newPass.length < 8)      return setErr("Password must be at least 8 characters.");
+    if (!/[0-9!@#$%^&*()]/.test(newPass)) return setErr("Password must contain at least one number or special character.");
+    if (newPass !== newPass2)    return setErr("Passwords do not match.");
+    setLoading(true);
+    try {
+      await sb.updatePassword(newPass);
+      setResetDone(true);
+      setNewPass(""); setNewPass2("");
+    } catch (e) { setErr(e.message); }
+    setLoading(false);
+  };
+
   // ── Register ─────────────────────────────────────────────────────
   const handleRegister = async () => {
     setErr(""); setSuccess("");
@@ -1657,6 +1708,49 @@ function LoginScreen({ onLogin }) {
     } catch (e) { setErr(e.message); }
     setLoading(false);
   };
+
+  // ── Password recovery screen (after clicking email reset link) ──
+  if (recoveryToken) {
+    return (
+      <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
+        <div style={{ position:"absolute", inset:0, backgroundImage:`radial-gradient(ellipse at 30% 60%, ${T.accentDim}44 0%, transparent 55%)`, pointerEvents:"none" }} />
+        <div className="fade-in" style={{ width:440, position:"relative" }}>
+          <div style={{ textAlign:"center", marginBottom:24 }}>
+            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1a4fd6, #3d7fff, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, margin:"0 auto 14px", boxShadow:"0 0 60px rgba(61,127,255,0.25)" }}>🔑</div>
+            <h1 style={{ fontSize:24, fontWeight:900, letterSpacing:"-0.5px", marginBottom:4, background:"linear-gradient(135deg, #eef2ff 40%, #3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Set New Password</h1>
+            <p style={{ color:T.textMid, fontSize:13 }}>Choose a strong new password for your account.</p>
+          </div>
+          <Card style={{ padding:28 }}>
+            {resetDone ? (
+              <div style={{ textAlign:"center", padding:"10px 0" }}>
+                <div style={{ fontSize:48, marginBottom:12 }}>✅</div>
+                <p style={{ fontSize:15, fontWeight:700, color:T.green, marginBottom:8 }}>Password updated!</p>
+                <p style={{ fontSize:13, color:T.textDim, marginBottom:24 }}>Your password has been changed successfully.</p>
+                <Btn variant="primary" fullWidth onClick={() => { setRecoveryToken(null); setResetDone(false); setTab("login"); }}>
+                  → Sign In Now
+                </Btn>
+              </div>
+            ) : (
+              <>
+                {err && <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:14 }}>{err}</div>}
+                <div style={{ marginBottom:16 }}>
+                  <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>New Password</label>
+                  <Input value={newPass} onChange={e=>setNewPass(e.target.value)} placeholder="Min 8 chars + number/symbol" prefix="🔒" type="password" />
+                </div>
+                <div style={{ marginBottom:22 }}>
+                  <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>Confirm New Password</label>
+                  <Input value={newPass2} onChange={e=>setNewPass2(e.target.value)} placeholder="Repeat new password" prefix="🔒" type="password" />
+                </div>
+                <Btn onClick={handleSetNewPassword} disabled={loading} fullWidth size="lg" icon={loading?"⏳":"✔"}>
+                  {loading ? "Saving…" : "Set New Password"}
+                </Btn>
+              </>
+            )}
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // ── Pending screen ───────────────────────────────────────────────
   if (pendingUser) {
