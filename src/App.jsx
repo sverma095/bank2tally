@@ -506,7 +506,7 @@ const BANK_TEMPLATES = {
   union:   { name:"Union Bank",    cols:{ date:"Date",              narration:"Narration",            debit:"Debit Amount",           credit:"Credit Amount",          balance:"Balance",              ref:"Reference Number" }},
   // ── Private Sector ─────────────────────────────────────────────
   hdfc:    { name:"HDFC Bank",     cols:{ date:"Date",              narration:"Narration",            debit:"Withdrawal Amt.",        credit:"Deposit Amt.",           balance:"Closing Balance",      ref:"Chq./Ref.No." }},
-  icici:   { name:"ICICI Bank",    cols:{ date:"Value Date",         narration:"Description",          debit:"Withdrawal (Dr)",        credit:"Deposit (Cr)",           balance:"Available Balance",    ref:"Transaction ID" }},
+  icici:   { name:"ICICI Bank",    cols:{ date:"Date",               narration:"Description",          debit:"Withdrawal (Dr)",        credit:"Deposit (Cr)",           balance:"Available Balance",    ref:"Transaction ID" }},  // "Date" matches both "Date" and "Value Date" via prefix
   axis:    { name:"Axis Bank",     cols:{ date:"Tran Date",         narration:"PARTICULARS",          debit:"DR",                     credit:"CR",                     balance:"BAL",                  ref:"CHQNO" }},
   kotak:   { name:"Kotak Bank",    cols:{ date:"Transaction Date",  narration:"Description",          debit:"Debit Amount",           credit:"Credit Amount",          balance:"Balance",              ref:"Reference No" }},
   yes:     { name:"Yes Bank",      cols:{ date:"Date",              narration:"Transaction Details",  debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Reference Number" }},
@@ -992,13 +992,36 @@ function parseICICIWords(pages) {
     curB = null;
   };
 
+  // Use fixed grouping — adaptive tolerance merges lines that are 12pt apart
+  // which is exactly the gap between rows in this PDF format
+  const groupFixed = (items, tol=4) => {
+    const lineMap = {};
+    items.forEach(it => {
+      const key = Math.round(it.y / tol) * tol;
+      if (!lineMap[key]) lineMap[key] = [];
+      lineMap[key].push(it);
+    });
+    return Object.keys(lineMap)
+      .sort((a,b) => Number(a)-Number(b))
+      .map(k => ({ y: Number(k), items: lineMap[k].sort((a,b)=>a.x-b.x) }));
+  };
+
   pages.forEach(({ items }) => {
     if (!items.length) return;
-    const physLines = groupIntoLines(items, 2);
+    const physLines = groupFixed(items, 4);
 
     physLines.forEach(line => {
       const txt = line.items.map(i => i.str).join(" ");
-      if (/generated on|page \d+\s+of|statement of transactions|legends used|account (name|number|type|currency)|ifsc|customer id|available balance.*total|total effective|s\.no.*transaction|bbps|bctt/i.test(txt)) return;
+      // Skip: page header/footer, legend section, column header row
+      // Be careful: "account" alone is too broad — match full phrases only
+      if (/^generated on|page \d+ of \d+/i.test(txt)) return;
+      if (/^statement of transactions/i.test(txt)) return;
+      if (/^legends used/i.test(txt)) return;
+      if (/^\d+\. [A-Z]{2,}\s+-\s+/i.test(txt)) return; // legend items "1. BBPS - ..."
+      if (/s\.no\s+transaction\s+id|withdrawal\s+\(dr\)|deposit\s+\(cr\)/i.test(txt)) return;
+      if (/^account (name|number|type|currency|statement):/i.test(txt)) return;
+      if (/^(ifsc|customer id|communication|available balance|total effective|balance)/i.test(txt)) return;
+      if (/^\*this is a system.generated/i.test(txt)) return;
 
       const slots = { sno:[], txnid:[], date:[], desc:[], debit:[], credit:[], balance:[] };
       line.items.forEach(it => { const c = colB(it.x); slots[c].push(it.str.trim()); });
@@ -1025,10 +1048,10 @@ function parseICICIWords(pages) {
         return;
       }
 
-      // Continuation line
-      if (curB) {
-        if (dateTk && !isAmountStr(dateTk)) curB.dateParts.push(dateTk);
-        if (desc)   curB.desc.push(desc);
+      // Continuation line — only if no sno (prevents stray header text being added)
+      if (curB && !(/^\d{1,4}$/.test(sno) && sno !== "")) {
+        if (dateTk && !isAmountStr(dateTk) && !/^(of|am|pm)$/i.test(dateTk)) curB.dateParts.push(dateTk);
+        if (desc && !/^(of|am|pm|page)$/i.test(desc)) curB.desc.push(desc);
         if (debit  && !curB.debit)   curB.debit   = debit;
         if (credit && !curB.credit)  curB.credit  = credit;
         if (bal    && !curB.balance) curB.balance = bal;
