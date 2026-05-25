@@ -3201,6 +3201,13 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
   );
 }
 
+// ── Role helpers (module-level so all screens can use them) ────────
+const DB_ROLES    = ["user","accountant","ca","admin"];
+const ROLE_LABELS = { user:"User", accountant:"Accountant", ca:"CA", admin:"Admin" };
+const toDbRole   = r => (r||"user").toLowerCase().trim();
+const fromDbRole = r => ROLE_LABELS[String(r||"").toLowerCase()] || r || "user";
+const roleColor  = r => { const n=String(r||"").toLowerCase(); return n==="admin"?"red":n==="ca"?"purple":n==="accountant"?"blue":"gray"; };
+
 // ══════════════════════════════════════════════════════════════════
 // SCREEN: User Management (Admin only)
 // ══════════════════════════════════════════════════════════════════
@@ -3227,22 +3234,9 @@ function UserManagementScreen({ adminUser }) {
   const [addLoading, setAddLoading] = useState(false);
   const [tab, setTab] = useState("users");
 
-  // ── Role definitions ─────────────────────────────────────────────
-  // DB values MUST match Supabase profiles_role_check constraint.
-  // Current constraint (inferred from error): CHECK (role IN ('admin','user','accountant','ca'))
-  // If you get constraint errors, run in Supabase SQL editor:
-  //   ALTER TABLE profiles DROP CONSTRAINT profiles_role_check;
-  //   ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
-  //     CHECK (role IN ('admin','user','accountant','ca'));
-  const DB_ROLES    = ["user","accountant","ca","admin"];
-  const ROLE_LABELS = { user:"User", accountant:"Accountant", ca:"CA", admin:"Admin" };
-  const ROLES       = DB_ROLES;
-  // Normalise any legacy mixed-case role to lowercase DB format
-  const toDbRole   = r => (r||"user").toLowerCase().trim();
-  const fromDbRole = r => ROLE_LABELS[String(r||"").toLowerCase()] || r || "user";
+  const ROLES = DB_ROLES; // alias for JSX below
 
   const statusColor = s => s==="approved"?"green":s==="pending"?"amber":s==="on_hold"?"purple":s==="rejected"?"red":"gray";
-  const roleColor   = r => { const n=String(r||"").toLowerCase(); return n==="admin"?"red":n==="ca"?"purple":n==="accountant"?"blue":"gray"; };
 
   const notify = (msg, type="success") => {
     setToast_({ msg, type });
