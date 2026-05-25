@@ -513,6 +513,11 @@ const BANK_TEMPLATES = {
   idfc:    { name:"IDFC First",    cols:{ date:"Date",              narration:"Transaction Remarks",  debit:"Debit Amount",           credit:"Credit Amount",          balance:"Balance",              ref:"Transaction ID" }},
   indus:   { name:"IndusInd Bank", cols:{ date:"Date",              narration:"Description",          debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Reference No." }},
   rbl:     { name:"RBL Bank",      cols:{ date:"Txn Date",          narration:"Description",          debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Ref No." }},
+  centralbank: { name:"Central Bank", cols:{ date:"Value Date",       narration:"Details",              debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Chq.No." }},
+  andhra:  { name:"Andhra/Union Bank",cols:{ date:"Tran Date",        narration:"Remarks",              debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Tran Id" }},
+  pnb:     { name:"PNB",             cols:{ date:"Transaction Date",  narration:"Narration",            debit:"Withdrawal",             credit:"Deposit",                balance:"Balance",              ref:"Cheque Number" }},
+  boi:     { name:"Bank of India",   cols:{ date:"Txn Date",          narration:"Description",          debit:"Withdrawal",             credit:"Deposits",               balance:"Balance",              ref:"Cheque No" }},
+  bob:     { name:"Bank of Baroda",  cols:{ date:"Value Date",        narration:"Details",              debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Chq.No." }},
   federal: { name:"Federal Bank",  cols:{ date:"Transaction Date",  narration:"Particulars",          debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Reference No" }},
   iob:     { name:"IOB",           cols:{ date:"Date",              narration:"Particulars",          debit:"Debit",                  credit:"Credit",                 balance:"Balance",              ref:"Reference No" }},
   // ── Credit Cards / Other ───────────────────────────────────────
@@ -774,6 +779,11 @@ function detectBank(pages) {
   if (/federal\s*bank/i.test(sample))                                                           return "federal";
   if (/indusind/i.test(sample))                                                                 return "indus";
   if (/rbl\s*bank/i.test(sample))                                                               return "rbl";
+  if (/andhra\s*bank|andhra.*corp/i.test(sample))                                               return "andhra";
+  if (/central\s*bank\s*of\s*india/i.test(sample))                                             return "centralbank";
+  if (/bank\s*of\s*baroda|\bbaroda\b/i.test(sample))                                          return "bob";
+  if (/bank\s*of\s*india/i.test(sample))                                                       return "boi";
+  if (/post\s*date.*value\s*date|value\s*date.*post\s*date/i.test(sample))                   return "txnhistory";
   return "generic";
 }
 
@@ -1125,6 +1135,477 @@ function parsePdfText(rawText) {
   return{headers,rows};
 }
 
+
+// ── Canara Bank Statement ─────────────────────────────────────────
+// Format: Txn Date | Value Date | Cheque No | Description | Branch Code | Debit | Credit | Balance
+// Also handles older format: Date | Value Date | Ref | Description | Debit | Credit | Balance
+function parseCanaraWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = -1, best = 0;
+  allLines.forEach((line,i) => {
+    if (i > 50 || RX_FOOTER.test(line)) return;
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    const score = cols.filter(c=>RX_HDR.test(c)).length;
+    if (score >= 3 && score > best) { best=score; hdrIdx=i; }
+  });
+  if (hdrIdx === -1) return null;
+
+  // Canara sometimes wraps "Branch Code" onto next line
+  let headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const nxt = (allLines[hdrIdx+1]||"").split(SEP).map(c=>c.trim()).filter(Boolean);
+  if (nxt.length && nxt.length <= headers.length && !nxt.some(isDateStr) && !nxt.some(isAmountStr)
+      && nxt.every(w=>/^[A-Za-z\.\(\)\/\-]+$/.test(w))) {
+    headers = headers.map((h,i) => nxt[i] ? h+" "+nxt[i] : h);
+    hdrIdx++;
+  }
+
+  const NEWROW = cols => isDateStr(cols[0]) || (cols.length >= 2 && isDateStr(cols[1]));
+  const txnRows = []; let cur = null;
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if (!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if (isAmountStr(tok)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c)&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if (cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+  return rows.length ? { headers, rows, _bankHint:"canara" } : null;
+}
+
+// ── Kotak Mahindra Bank Statement ────────────────────────────────
+// Format: Sl.No | Date | Description | Chc/Ref number | Amount | Dr/Cr | Balance | Dr/Cr
+// The Dr/Cr column tells direction; Amount is always positive
+function parseKotakWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<60 &&
+    /description|narration/i.test(line) &&
+    /dr.*cr|credit.*debit|amount/i.test(line));
+  if (hdrIdx === -1) {
+    hdrIdx = -1; let best = 0;
+    allLines.forEach((line,i) => {
+      if (i>60) return;
+      const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      const score = cols.filter(c=>RX_HDR.test(c)).length;
+      if (score >= 3 && score > best) { best=score; hdrIdx=i; }
+    });
+  }
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const drcrIdx = headers.findIndex(h => /^dr\/cr$|^cr\/dr$/i.test(h));
+  const amtIdx  = headers.findIndex(h => /^amount$/i.test(h));
+
+  const NEWROW = cols => {
+    const first = cols[0];
+    // Kotak has serial number first, then date
+    return /^\d{1,4}$/.test(first) ? isDateStr(cols[1]) : isDateStr(first);
+  };
+  const txnRows = []; let cur = null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols = line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if (!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if (isAmountStr(tok)) cur.push(tok);
+        else if (/^(DR|CR)$/i.test(tok)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c)&&!isDateStr(c)&&!/^(DR|CR)$/i.test(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if (cur) txnRows.push(cur);
+
+  // Normalise: if Dr/Cr + Amount columns exist, split into Debit/Credit
+  let outHeaders = headers;
+  let outRows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+
+  if (drcrIdx !== -1 && amtIdx !== -1) {
+    outHeaders = headers.filter((_,i)=>i!==drcrIdx && i!==amtIdx).concat(["Debit","Credit","Balance"]);
+    const balIdx = headers.findIndex(h=>/balance/i.test(h));
+    outRows = outRows.map(r => {
+      const drCr = (r[drcrIdx]||"").toUpperCase();
+      const amt  = r[amtIdx] || "";
+      const bal  = balIdx !== -1 ? r[balIdx] : r[r.length-1];
+      const rest = r.filter((_,i)=>i!==drcrIdx&&i!==amtIdx&&i!==balIdx);
+      return [...rest, drCr==="DR"?amt:"", drCr==="CR"?amt:"", bal];
+    });
+  }
+
+  return outRows.length ? { headers: outHeaders, rows: outRows, _bankHint:"kotak" } : null;
+}
+
+// ── Andhra Bank / Union Bank / UCO Bank Statement ─────────────────
+// Format: Tran Id | Tran Date | Remarks | Amount (Rs.) | Balance (Rs.)
+// Amount has "(Dr)" or "(Cr)" suffix embedded in same cell
+function parseAndhraWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<60 &&
+    /tran.*date|transaction.*date/i.test(line) &&
+    /remarks|description|narration/i.test(line));
+  if (hdrIdx === -1) {
+    let best=0;
+    allLines.forEach((line,i) => {
+      if(i>60)return;
+      const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      const score=cols.filter(c=>RX_HDR.test(c)).length;
+      if(score>=3&&score>best){best=score;hdrIdx=i;}
+    });
+  }
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  // Remove Rs. suffix from column headers for cleaner display
+  const cleanHeaders = headers.map(h => h.replace(/\s*\(rs\.?\)/i,"").trim());
+
+  const NEWROW = cols => isDateStr(cols[0]) || (cols.length>=2 && isDateStr(cols[1]));
+  const txnRows=[]; let cur=null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if(isAmountStr(tok.replace(/\s*\(dr\)|\s*\(cr\)/gi,""))) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c.replace(/\s*\(dr\)|\s*\(cr\)/gi,""))&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if (cur) txnRows.push(cur);
+
+  // Andhra encodes Dr/Cr as "300.00 (Dr)" in the Amount column
+  // Split into Debit / Credit columns
+  const amtColIdx = cleanHeaders.findIndex(h=>/^amount$/i.test(h));
+  const balColIdx = cleanHeaders.findIndex(h=>/balance/i.test(h));
+
+  let outHeaders = cleanHeaders;
+  let outRows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<cleanHeaders.length)r.push("");return r.slice(0,cleanHeaders.length);});
+
+  if (amtColIdx !== -1) {
+    const newHdrs = cleanHeaders.filter((_,i)=>i!==amtColIdx).slice(0,balColIdx!==-1?balColIdx:-1);
+    outHeaders = [...(balColIdx!==-1?cleanHeaders.filter((_,i)=>i!==amtColIdx&&i!==balColIdx):cleanHeaders.filter((_,i)=>i!==amtColIdx)), "Debit","Credit","Balance"];
+    outRows = outRows.map(r => {
+      const raw  = r[amtColIdx] || "";
+      const isDr = /dr/i.test(raw);
+      const amt  = raw.replace(/[^0-9.]/g,"");
+      const bal  = balColIdx !== -1 ? r[balColIdx] : "";
+      const rest = r.filter((_,i)=>i!==amtColIdx&&i!==balColIdx);
+      return [...rest, isDr?amt:"", isDr?"":amt, bal];
+    });
+  }
+
+  return outRows.length ? { headers: outHeaders, rows: outRows, _bankHint:"andhra" } : null;
+}
+
+// ── Punjab National Bank (PNB) Statement ─────────────────────────
+// Format: Transaction Date | Cheque Number | Withdrawal | Deposit | Balance | Narration
+// Balance has "Cr." suffix
+function parsePNBWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<60 &&
+    /transaction.*date|txn.*date/i.test(line) &&
+    /withdrawal|deposit/i.test(line));
+  if (hdrIdx === -1) {
+    let best=0;
+    allLines.forEach((line,i) => {
+      if(i>60)return;
+      const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      const score=cols.filter(c=>RX_HDR.test(c)).length;
+      if(score>=3&&score>best){best=score;hdrIdx=i;}
+    });
+  }
+  if (hdrIdx === -1) return null;
+
+  // PNB wraps "Transaction Date" across two lines
+  let headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const nxt = (allLines[hdrIdx+1]||"").split(SEP).map(c=>c.trim()).filter(Boolean);
+  if (nxt.length && nxt.length <= headers.length && !nxt.some(isDateStr) && !nxt.some(isAmountStr)
+      && nxt.every(w=>/^[A-Za-z\.\(\)\/\-]+$/.test(w))) {
+    headers = headers.map((h,i) => nxt[i] ? h+" "+nxt[i] : h);
+    hdrIdx++;
+  }
+
+  const NEWROW = cols => isDateStr(cols[0]);
+  const txnRows=[]; let cur=null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        // PNB balance has "Cr." suffix e.g. "570.53 Cr."
+        const clean=tok.replace(/\s*(cr\.?|dr\.?)$/i,"");
+        if(isAmountStr(clean)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c.replace(/\s*(cr\.?|dr\.?)$/i,""))&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if(cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+  return rows.length ? { headers, rows, _bankHint:"pnb" } : null;
+}
+
+// ── Central Bank of India Statement ──────────────────────────────
+// Format: Value Date | Post Date | Details | Chq.No. | Debit | Credit | Balance
+// Balance has "Cr" or "Dr" suffix. Multi-line descriptions grouped by blank Post Date
+function parseCentralBankWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<60 &&
+    /value\s*date|post\s*date/i.test(line) &&
+    /debit|credit/i.test(line));
+  if (hdrIdx === -1) {
+    let best=0;
+    allLines.forEach((line,i) => {
+      if(i>60)return;
+      const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      const score=cols.filter(c=>RX_HDR.test(c)).length;
+      if(score>=3&&score>best){best=score;hdrIdx=i;}
+    });
+  }
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  // Central Bank: new txn has date in col 0; continuation rows have "." or blank in col 0
+  const NEWROW = cols => isDateStr(cols[0]);
+  const txnRows=[]; let cur=null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(!cols.length || cols[0]===".") {
+      // continuation line — merge description
+      if(cur) {
+        const descIdx=cur.findIndex((c,i)=>i>1&&!isAmountStr(c.replace(/\s*(cr|dr)$/i,""))&&!isDateStr(c));
+        if(descIdx!==-1&&cols.length) cur[descIdx]+=" "+cols.join(" ");
+      }
+      return;
+    }
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        const clean=tok.replace(/\s*(cr|dr)$/i,"");
+        if(isAmountStr(clean)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>1&&!isAmountStr(c.replace(/\s*(cr|dr)$/i,""))&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if(cur) txnRows.push(cur);
+
+  // Clean "Cr"/"Dr" suffix from balance
+  const rows = txnRows.filter(r=>r.some(Boolean)).map(r => {
+    const out = r.map(c => typeof c==="string" ? c.replace(/\s+(Cr|Dr)$/i,"").trim() : c);
+    while(out.length<headers.length)out.push("");
+    return out.slice(0,headers.length);
+  });
+  return rows.length ? { headers, rows, _bankHint:"centralbank" } : null;
+}
+
+// ── Bank of India Statement ───────────────────────────────────────
+// Format: SI No | Txn Date | Description | Cheque No | Withdrawal | Deposits | Balance
+// Older format with wide narration, SI number starts each row
+function parseBOIWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<60 &&
+    /withdrawal|deposits|deposit/i.test(line) &&
+    /txn.*date|date/i.test(line));
+  if (hdrIdx === -1) {
+    let best=0;
+    allLines.forEach((line,i) => {
+      if(i>60)return;
+      const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      const score=cols.filter(c=>RX_HDR.test(c)).length;
+      if(score>=3&&score>best){best=score;hdrIdx=i;}
+    });
+  }
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  // BOI rows start with serial number or date
+  const NEWROW = cols => /^\d{1,6}$/.test(cols[0]) || isDateStr(cols[0]) || (isDateStr(cols[1]||""));
+  const txnRows=[]; let cur=null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if(isAmountStr(tok)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c)&&!isDateStr(c)&&!/^\d{1,6}$/.test(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if(cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+  return rows.length ? { headers, rows, _bankHint:"boi" } : null;
+}
+
+// ── Bank of Baroda Statement ──────────────────────────────────────
+// Format: Value Date | Post Date | Details | Chq.No. | Debit | Credit | Balance
+// Balance has "Cr" suffix; continuation rows have blank Value Date
+function parseBOBWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<60 &&
+    /value\s*date|post\s*date/i.test(line) &&
+    /debit|credit/i.test(line));
+  if (hdrIdx === -1) {
+    let best=0;
+    allLines.forEach((line,i) => {
+      if(i>60)return;
+      const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      const score=cols.filter(c=>RX_HDR.test(c)).length;
+      if(score>=3&&score>best){best=score;hdrIdx=i;}
+    });
+  }
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const NEWROW = cols => isDateStr(cols[0]);
+  const txnRows=[]; let cur=null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        const clean=tok.replace(/\s*(cr|dr)$/i,"");
+        if(isAmountStr(clean)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c.replace(/\s*(cr|dr)$/i,""))&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if(cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean)).map(r => {
+    const out=r.map(c=>typeof c==="string"?c.replace(/\s+(Cr|Dr)$/i,"").trim():c);
+    while(out.length<headers.length)out.push("");
+    return out.slice(0,headers.length);
+  });
+  return rows.length ? { headers, rows, _bankHint:"bob" } : null;
+}
+
+// ── RBL Bank Credit Card Statement ───────────────────────────────
+// Format: Date | Description | Amount (can be debit or credit)
+// Opening/closing balance in header. Amounts with sign or label
+function parseRBLWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<80 &&
+    /date/i.test(line) &&
+    /description|narration|particulars/i.test(line) &&
+    /amount/i.test(line));
+  if (hdrIdx === -1) {
+    let best=0;
+    allLines.forEach((line,i) => {
+      if(i>80)return;
+      const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+      const score=cols.filter(c=>RX_HDR.test(c)).length;
+      if(score>=3&&score>best){best=score;hdrIdx=i;}
+    });
+  }
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const NEWROW = cols => isDateStr(cols[0]);
+  const txnRows=[]; let cur=null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)||/reward.*summary|account.*summary|payment.*due|minimum.*amount/i.test(line)) {
+      if(cur){txnRows.push(cur);cur=null;} return;
+    }
+    const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        if(isAmountStr(tok)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c)&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if(cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean))
+    .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
+  return rows.length ? { headers, rows, _bankHint:"rbl" } : null;
+}
+
+// ── Transaction History style (SBI/IOB/BOB online portal exports) ─
+// Format: Post Date | Value Date | Description | Debit | Credit | Balance
+// These have "CR" suffix on Balance column
+function parseTransactionHistoryWords(pages) {
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items,3), width));
+  const SEP = /\t|\s{2,}/;
+
+  let hdrIdx = allLines.findIndex((line,i) => i<60 &&
+    /post\s*date|value\s*date/i.test(line) &&
+    /description|narration/i.test(line));
+  if (hdrIdx === -1) return null;
+
+  const headers = allLines[hdrIdx].split(SEP).map(c=>c.trim()).filter(Boolean);
+  const NEWROW = cols => isDateStr(cols[0]);
+  const txnRows=[]; let cur=null;
+
+  allLines.slice(hdrIdx+1).forEach(line => {
+    if (RX_FOOTER.test(line)) { if(cur){txnRows.push(cur);cur=null;} return; }
+    const cols=line.split(SEP).map(c=>c.trim()).filter(Boolean);
+    if(!cols.length) return;
+    if (NEWROW(cols)) { if(cur)txnRows.push(cur); cur=[...cols]; }
+    else if (cur) {
+      cols.forEach(tok => {
+        const clean=tok.replace(/\s*(cr|dr)$/i,"");
+        if(isAmountStr(clean)) cur.push(tok);
+        else { const ni=cur.findIndex((c,i)=>i>0&&!isAmountStr(c.replace(/\s*(cr|dr)$/i,""))&&!isDateStr(c)); if(ni!==-1)cur[ni]+=" "+tok; else cur.push(tok); }
+      });
+    }
+  });
+  if(cur) txnRows.push(cur);
+
+  const rows = txnRows.filter(r=>r.some(Boolean)).map(r => {
+    const out=r.map(c=>typeof c==="string"?c.replace(/\s+(CR|DR)$/i,"").trim():c);
+    while(out.length<headers.length)out.push("");
+    return out.slice(0,headers.length);
+  });
+  return rows.length ? { headers, rows, _bankHint:"txnhistory" } : null;
+}
+
 // ── Generic text extraction for the universal parser ──────────────
 async function extractPdfText(buf) {
   const pages = await extractWordItems(buf);
@@ -1187,10 +1668,23 @@ async function parseFile(file, onProgress) {
     onProgress && onProgress(`Detected: ${bank.toUpperCase()} — parsing…`);
 
     const PARSERS = {
-      icici: parseICICIWords,
-      sbi:   parseSBIWords,
-      hdfc:  parseHDFCWords,
-      axis:  parseAxisWords,
+      icici:       parseICICIWords,
+      sbi:         parseSBIWords,
+      hdfc:        parseHDFCWords,
+      axis:        parseAxisWords,
+      canara:      parseCanaraWords,
+      kotak:       parseKotakWords,
+      andhra:      parseAndhraWords,
+      pnb:         parsePNBWords,
+      centralbank: parseCentralBankWords,
+      boi:         parseBOIWords,
+      bob:         parseBOBWords,
+      rbl:         parseRBLWords,
+      txnhistory:  parseTransactionHistoryWords,
+      union:       parseAndhraWords,   // Union Bank has same format as Andhra
+      federal:     parseCanaraWords,   // Federal Bank similar to Canara
+      indus:       parseCanaraWords,   // IndusInd similar layout
+      yes:         parseCanaraWords,   // Yes Bank similar layout
     };
 
     // Try bank-specific parser first
