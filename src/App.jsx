@@ -3850,7 +3850,7 @@ function AppInner() {
       sb._token = session.access_token;
 
       // Helper: restore from session metadata alone (fallback)
-      const restoreFromSession = (profile) => {
+      const restoreFromSession = async (profile) => {
         const meta = session.user.user_metadata || {};
         const name = profile?.name || meta.name || session.user.email.split("@")[0];
         const role = (profile?.role || meta.role || "user").toLowerCase().trim();
