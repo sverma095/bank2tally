@@ -993,11 +993,23 @@ function parseICICIWords(pages) {
   const MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
                   jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
   const normDate = parts => {
-    const s = parts.join("").replace(/\s+/g, "");
-    const m = s.match(/^(\d{1,2})[-\/](\w{3,})[-\/](\d{2,4})$/i);
-    if (!m) return s;
-    const mo = MONTHS[m[2].toLowerCase().slice(0, 3)] || m[2];
-    return `${m[1].padStart(2,"0")}/${mo}/${m[3]}`;
+    // Join all parts, stripping trailing hyphens before appending year
+    // e.g. ["04-May-", "2026"] → "04-May-2026"
+    const s = parts.map((p,i) => i===0 ? p : p.replace(/^[-\/]/, "")).join("").replace(/\s+/g, "");
+    // Match DD-Mon-YYYY or DD-Mon-YY
+    const m = s.match(/^(\d{1,2})[-\/](\w{3,})[-\/]?(\d{2,4})$/i);
+    if (m) {
+      const mo = MONTHS[m[2].toLowerCase().slice(0, 3)] || m[2];
+      const yr = m[3].length === 2 ? "20"+m[3] : m[3];
+      return `${m[1].padStart(2,"0")}/${mo}/${yr}`;
+    }
+    // Match DD/MM/YYYY
+    const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m2) {
+      const yr = m2[3].length === 2 ? "20"+m2[3] : m2[3];
+      return `${m2[1].padStart(2,"0")}/${m2[2].padStart(2,"0")}/${yr}`;
+    }
+    return s;
   };
 
   const rowsB = [];
@@ -1033,15 +1045,22 @@ function parseICICIWords(pages) {
     physLines.forEach(line => {
       const txt = line.items.map(i => i.str).join(" ");
       // Skip: page header/footer, legend section, column header row
-      // Be careful: "account" alone is too broad — match full phrases only
-      if (/^generated on|page \d+ of \d+/i.test(txt)) return;
+      if (!txt.trim()) return;
+      // Footer: "Generated on : 25 May'26 (10:57 AM)  Page 1 of 4"
+      if (/generated\s+on/i.test(txt)) return;
+      if (/page\s+\d+\s+of\s+\d+/i.test(txt)) return;
       if (/^statement of transactions/i.test(txt)) return;
       if (/^legends used/i.test(txt)) return;
-      if (/^\d+\. [A-Z]{2,}\s+-\s+/i.test(txt)) return; // legend items "1. BBPS - ..."
-      if (/s\.no\s+transaction\s+id|withdrawal\s+\(dr\)|deposit\s+\(cr\)/i.test(txt)) return;
-      if (/^account (name|number|type|currency|statement):/i.test(txt)) return;
-      if (/^(ifsc|customer id|communication|available balance|total effective|balance)/i.test(txt)) return;
-      if (/^\*this is a system.generated/i.test(txt)) return;
+      if (/^\d+\.\s+[A-Z]{2,}\s*-/i.test(txt)) return; // "1. BBPS - ..."
+      if (/s\.no|withdrawal.*dr|deposit.*cr/i.test(txt) && /transaction/i.test(txt)) return;
+      if (/^account\s+(name|number|type|currency)/i.test(txt)) return;
+      if (/^(ifsc|customer\s+id|communication|total\s+effective)/i.test(txt)) return;
+      if (/^\*this\s+is\s+a\s+system/i.test(txt)) return;
+      // Any line where sno slot contains non-numeric text is header/footer
+      const _slots0 = {};
+      line.items.forEach(it => { const c = colB(it.x); (_slots0[c]||(_slots0[c]=[])).push(it.str); });
+      const _sno0 = (_slots0.sno||[]).join("").trim();
+      if (_sno0 && !/^\d{1,4}$/.test(_sno0)) return; // "Generated", "S.no", legend text etc
 
       const slots = { sno:[], txnid:[], date:[], desc:[], debit:[], credit:[], balance:[] };
       line.items.forEach(it => { const c = colB(it.x); slots[c].push(it.str.trim()); });
@@ -4164,7 +4183,16 @@ function UserManagementScreen({ adminUser }) {
       }
 
       setUsers(enriched);
-    } catch (e) { notify("Error loading users: "+e.message, "error"); }
+    } catch (e) {
+      const msg = e.message || "";
+      if (/infinite recursion/i.test(msg)) {
+        notify("RLS policy error — run the SQL fix in Settings to resolve.", "error");
+      } else if (/406|not acceptable/i.test(msg)) {
+        notify("Profiles table RLS is blocking access. Run the SQL fix from the audit report.", "error");
+      } else {
+        notify("Error loading users: "+msg, "error");
+      }
+    }
     setLoading(false);
   }, []);
 
@@ -4420,8 +4448,25 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
           </div>
         ) : filtered.length===0 ? (
           <div style={{ textAlign:"center", padding:"60px 0", color:T.textDim }}>
-            <div style={{ fontSize:36, marginBottom:10 }}>🔍</div>
-            <p style={{ fontSize:14 }}>No users match your filters</p>
+            <div style={{ fontSize:36, marginBottom:10 }}>{users.length===0 ? "🔒" : "🔍"}</div>
+            {users.length===0 ? (
+              <>
+                <p style={{ fontSize:14, fontWeight:600, color:T.text, marginBottom:6 }}>No users loaded</p>
+                <p style={{ fontSize:12, color:T.textDim, marginBottom:16 }}>
+                  This is usually caused by an RLS (Row Level Security) policy error in Supabase.
+                </p>
+                <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+                  <Btn size="sm" variant="secondary" icon="↺" onClick={loadUsers}>Retry</Btn>
+                  <Btn size="sm" variant="primary" icon="🔧" onClick={() => {
+                    const sql = `-- Fix RLS infinite recursion\nDROP POLICY IF EXISTS "Admins can read all profiles" ON profiles;\nDROP POLICY IF EXISTS "Admins can update profiles" ON profiles;\nCREATE POLICY "Admins can read all profiles" ON profiles FOR SELECT USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR auth.uid() = id);\nCREATE POLICY "Admins can update profiles" ON profiles FOR UPDATE USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');`;
+                    navigator.clipboard?.writeText(sql);
+                    alert("SQL copied to clipboard!\n\nPaste and run it in:\nSupabase Dashboard → SQL Editor");
+                  }}>Copy RLS Fix SQL</Btn>
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize:14 }}>No users match your filters</p>
+            )}
           </div>
         ) : (
           <>
