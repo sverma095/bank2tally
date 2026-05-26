@@ -3805,7 +3805,7 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
       setOtpSent(true);
       // In production: call an SMS gateway (Twilio/MSG91) here
       // For now show the OTP in a toast (demo mode)
-      alert(\`[Demo] Your OTP is: \${code}\n(In production this would be sent via SMS)\`);
+      alert(`[Demo] Your OTP is: ${code}\n(In production this would be sent via SMS)`);
     } catch(e) { setOtpErr("Failed to send OTP: "+e.message); }
     setOtpSending(false);
   };
