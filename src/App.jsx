@@ -830,7 +830,7 @@ function detectBank(pages) {
   const compact  = rawItems.join("").toLowerCase();  // no spaces — catches "I C I C I B a n k"
   const test     = s => sample.includes(s) || compact.includes(s);
 
-  if (test("icicibank") || test("icici bank") || /detailed\s*statement|cr\/dr.*transaction.*amount/i.test(sample)) return "icici";
+  if (test("icicibank") || test("icici bank") || test("icic0") || test("icicibank.com") || /detailed\s*statement|cr\/dr.*transaction.*amount/i.test(sample) || (/account\s*statement/i.test(sample) && /icic/i.test(compact))) return "icici";
   if (test("state bank of india") || test("statebankofindia") || /\bsbi\b|sbchq|sbin\d{7}/i.test(sample)) return "sbi";
   if (test("hdfc bank") || test("hdfcbank") || /withdrawal\s*amt\.|deposit\s*amt\./i.test(sample)) return "hdfc";
   if (test("axis bank") || test("axisbank") || /tran\s*date.*particulars/i.test(sample))       return "axis";
