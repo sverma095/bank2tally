@@ -564,31 +564,34 @@ const SCREENS = { LOGIN: -1, UPLOAD: 0, COLUMN_MAP: 1, LEDGER: 2, PREVIEW: 3, HI
 // ── Helpers ──────────────────────────────────────────────────────
 const genId = () => Math.random().toString(36).slice(2, 9);
 const fmt = n => n == null || n === "" ? "" : Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Parse any Indian/ISO date string into a JS Date (noon IST to avoid timezone shift)
+const parseIndianDate = v => {
+  if (v instanceof Date) return v;
+  const s = String(v).trim();
+  const p = s.split(/[\/\-\.]/);
+  if (p.length !== 3) return new Date(s); // fallback
+  const [a, b, c] = p.map(x => x.trim());
+  if (a.length === 4) {
+    // ISO: YYYY-MM-DD or YYYY/MM/DD
+    return new Date(`${a}-${b.padStart(2,"0")}-${c.padStart(2,"0")}T12:00:00`);
+  } else if (c.length === 4) {
+    // Indian: DD/MM/YYYY or DD-MM-YYYY  (a=day, b=month, c=year)
+    // IMPORTANT: never pass DD/MM/YYYY to new Date() directly — JS reads it as MM/DD
+    return new Date(`${c}-${b.padStart(2,"0")}-${a.padStart(2,"0")}T12:00:00`);
+  } else if (c.length === 2) {
+    // Short year DD/MM/YY
+    return new Date(`20${c}-${b.padStart(2,"0")}-${a.padStart(2,"0")}T12:00:00`);
+  }
+  return new Date(s);
+};
 const fmtDate = v => {
   if (!v) return "";
-  let d = v instanceof Date ? v : new Date(String(v));
-  if (isNaN(d)) {
-    const p = String(v).split(/[\/\-\.]/);
-    if (p.length === 3) {
-      const [a, b, c] = p;
-      // Detect format: YYYY-MM-DD vs DD-MM-YYYY
-      if (a?.length === 4) {
-        // ISO: YYYY-MM-DD — use T12:00:00 to avoid timezone day-shift (IST is UTC+5:30)
-        d = new Date(`${a}-${String(b).padStart(2,"0")}-${String(c).padStart(2,"0")}T12:00:00`);
-      } else if (c?.length === 4) {
-        // Indian: DD-MM-YYYY
-        d = new Date(`${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}T12:00:00`);
-      } else {
-        // Short year: DD-MM-YY → 20YY
-        d = new Date(`20${c}-${String(b).padStart(2,"0")}-${String(a).padStart(2,"0")}T12:00:00`);
-      }
-    }
-  }
+  const d = parseIndianDate(v);
   return isNaN(d) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 const fmtDateShort = v => {
   if (!v) return "";
-  let d = v instanceof Date ? v : new Date(String(v));
+  const d = parseIndianDate(v);
   return isNaN(d) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 };
 
