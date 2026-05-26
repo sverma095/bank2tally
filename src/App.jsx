@@ -760,6 +760,7 @@ async function loadPdfJs() {
 
 // Extract raw word items with x/y positions from all pages
 // Y is converted to top-down (0 = page top) for consistent processing
+// Uses disableCombineTextItems:false so pdfjs merges adjacent chars into words
 async function extractWordItems(buf) {
   const pdfjsLib = await loadPdfJs();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
@@ -767,15 +768,53 @@ async function extractWordItems(buf) {
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const vp   = page.getViewport({ scale: 1 });
-    const con  = await page.getTextContent();
-    const items = con.items
+    const con  = await page.getTextContent({
+      normalizeWhitespace:     true,
+      disableCombineTextItems: false,   // let pdfjs combine adjacent chars
+    });
+
+    // pdfjs still sometimes emits single chars; we merge them into words here.
+    // Strategy: group items by their baseline Y (transform[5]), then within each
+    // line merge items whose X gap is < (fontSize * 0.4) — i.e. no visible space.
+    const raw = con.items
       .filter(it => it.str && it.str.trim())
       .map(it => ({
-        x:   Math.round(it.transform[4] * 10) / 10,
-        y:   Math.round((vp.height - it.transform[5]) * 10) / 10,  // top-down Y
-        w:   it.width || 0,
-        str: it.str,
+        x:    Math.round(it.transform[4] * 10) / 10,
+        y:    Math.round((vp.height - it.transform[5]) * 10) / 10,
+        baseY: Math.round(it.transform[5] * 10) / 10,  // raw baseline for merging
+        w:    it.width || 0,
+        fs:   Math.abs(it.transform[0]) || 10,         // font size from transform[0]
+        str:  it.str,
       }));
+
+    // 1. Group by baseline Y with 2pt tolerance
+    const byLine = {};
+    raw.forEach(it => {
+      const key = Math.round(it.baseY / 2) * 2;
+      if (!byLine[key]) byLine[key] = [];
+      byLine[key].push(it);
+    });
+
+    // 2. Within each line, merge chars whose gap < 40% of font size into words
+    const items = [];
+    Object.values(byLine).forEach(line => {
+      line.sort((a, b) => a.x - b.x);
+      const words = [];
+      line.forEach(it => {
+        const prev = words[words.length - 1];
+        const gap  = prev ? it.x - (prev.x + prev.w) : Infinity;
+        const spaceThreshold = (it.fs || 10) * 0.35;
+        if (prev && gap < spaceThreshold && gap > -2) {
+          // merge into previous word
+          prev.str += it.str;
+          prev.w    = (it.x + it.w) - prev.x;
+        } else {
+          words.push({ x: it.x, y: it.y, w: it.w, str: it.str });
+        }
+      });
+      items.push(...words);
+    });
+
     pages.push({ pageNum: p, items, width: vp.width, height: vp.height });
   }
   return pages;
@@ -1033,24 +1072,9 @@ function parseICICIWords(pages) {
       if (!lineMap[key]) lineMap[key] = [];
       lineMap[key].push(it);
     });
-    // Sort each line by X and merge adjacent chars into words (gap < 3pt = same word)
     return Object.keys(lineMap)
       .sort((a,b) => Number(a)-Number(b))
-      .map(k => {
-        const sorted = lineMap[k].sort((a,b) => a.x - b.x);
-        // Merge chars that are very close together (pdfjs splits words char-by-char)
-        const merged = [];
-        sorted.forEach(it => {
-          const prev = merged[merged.length - 1];
-          if (prev && (it.x - (prev.x + (prev.w||prev.str.length*6))) < 3 && it.x > prev.x) {
-            prev.str += it.str;
-            prev.w = (prev.w||0) + (it.w||it.str.length*6);
-          } else {
-            merged.push({ ...it });
-          }
-        });
-        return { y: Number(k), items: merged };
-      });
+      .map(k => ({ y: Number(k), items: lineMap[k].sort((a,b)=>a.x-b.x) }));
   };
 
   pages.forEach(({ items }) => {
