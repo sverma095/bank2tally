@@ -4522,27 +4522,65 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
       </Modal>
 
       {/* ── Reset Password ──────────────────────────────────────── */}
-      <Modal open={!!resetModal} onClose={() => setResetModal(null)} title="🔑 Reset Password" width={420}>
-        {resetModal && (
-          <div>
-            <div style={{ background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
-              <p style={{ fontSize:12, color:T.textMid, lineHeight:1.7 }}>
-                Send a password-reset link to <strong style={{color:T.text}}>{resetModal.name}</strong><br/>
-                <span style={{color:T.textDim}}>{resetModal.email||"(no email on file)"}</span>
-              </p>
-            </div>
-            {!resetModal.email && (
-              <div style={{ background:T.amberDim||T.accentDim, border:`1px solid ${T.amber||T.accent}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.amber||T.accent, marginBottom:12 }}>
-                ⚠ No email address found for this user. Reset email cannot be sent.
+      <Modal open={!!resetModal} onClose={() => setResetModal(null)} title="🔑 Reset Password" width={440}>
+        {resetModal && (() => {
+          const effectiveEmail = resetModal.email || manualEmail.trim();
+          return (
+            <div>
+              <div style={{ background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+                <p style={{ fontSize:13, color:T.textMid, lineHeight:1.7 }}>
+                  Send a password-reset link to <strong style={{color:T.text}}>{resetModal.name}</strong>
+                </p>
+                {resetModal.email
+                  ? <p style={{ fontSize:12, color:T.green, marginTop:4 }}>✓ {resetModal.email}</p>
+                  : <p style={{ fontSize:12, color:"#f59e0b", marginTop:4 }}>⚠ No email stored in profile</p>
+                }
               </div>
-            )}
-            {newPassErr && <div style={{ background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.red, marginBottom:12 }}>✕ {newPassErr}</div>}
-            <div style={{ display:"flex", gap:10 }}>
-              <Btn variant="secondary" fullWidth onClick={() => setResetModal(null)}>Cancel</Btn>
-              <Btn variant="primary" fullWidth icon="📧" onClick={() => sendPasswordReset(resetModal)} disabled={!resetModal.email}>Send Reset Email</Btn>
+
+              {/* If email missing — let admin enter it manually */}
+              {!resetModal.email && (
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>
+                    Enter email address for this user
+                  </label>
+                  <Input
+                    value={manualEmail}
+                    onChange={e => setManualEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    prefix="✉"
+                    type="email"
+                  />
+                  <p style={{ fontSize:11, color:T.textDim, marginTop:5 }}>
+                    This will also be saved to the user's profile for future use.
+                  </p>
+                </div>
+              )}
+
+              {newPassErr && <div style={{ background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.red, marginBottom:12 }}>✕ {newPassErr}</div>}
+
+              <div style={{ display:"flex", gap:10 }}>
+                <Btn variant="secondary" fullWidth onClick={() => setResetModal(null)}>Cancel</Btn>
+                <Btn
+                  variant="primary" fullWidth icon="📧"
+                  disabled={!effectiveEmail || !effectiveEmail.includes("@")}
+                  onClick={async () => {
+                    // If admin typed a manual email, save it to profiles first
+                    if (!resetModal.email && manualEmail.trim()) {
+                      try {
+                        await sb.update("profiles", { id: resetModal.id }, { email: manualEmail.trim().toLowerCase() });
+                        patchUser(resetModal.id, { email: manualEmail.trim().toLowerCase(), _emailMissing: false });
+                        setResetModal(m => ({ ...m, email: manualEmail.trim().toLowerCase() }));
+                      } catch(e) { setNewPassErr("Could not save email: "+e.message); return; }
+                    }
+                    sendPasswordReset({ ...resetModal, email: effectiveEmail });
+                  }}
+                >
+                  Send Reset Email
+                </Btn>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* ── View User Profile ────────────────────────────────────── */}
