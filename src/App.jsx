@@ -4216,7 +4216,7 @@ function UserManagementScreen({ adminUser }) {
   // ── Edit / Save Profile ────────────────────────────────────────
   const openEditUser = (u) => {
     setEditUser(u);
-    setEditForm({ name: u.name||"", company: u.company||"", role: toDbRole(u.role||"user"), status: u.status||"approved" });
+    setEditForm({ name: u.name||"", email: u.email||"", company: u.company||"", role: toDbRole(u.role||"user"), status: u.status||"approved" });
     setEditErr("");
   };
 
@@ -4224,8 +4224,11 @@ function UserManagementScreen({ adminUser }) {
     if (!editForm.name.trim()) return setEditErr("Name is required.");
     setEditLoading(true); setEditErr("");
     try {
+      if (!editForm.email.trim() || !editForm.email.includes("@"))
+        return setEditErr("A valid email address is required.");
       const payload = {
         name:       editForm.name.trim(),
+        email:      editForm.email.trim().toLowerCase(),
         company:    editForm.company.trim(),
         role:       toDbRole(editForm.role),   // normalise to DB lowercase
         status:     editForm.status,
@@ -4638,6 +4641,19 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
             <div>
               <label style={{ fontSize:12, color:T.textDim, display:"block", marginBottom:5 }}>Full Name *</label>
               <Input value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} placeholder="e.g. Priya Sharma" prefix="👤" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.textDim, display:"block", marginBottom:5 }}>
+                Email Address *
+                {editUser && !editUser.email && <span style={{color:"#f59e0b",marginLeft:6,fontSize:11}}>⚠ Missing — enter to enable password reset</span>}
+              </label>
+              <Input
+                value={editForm.email}
+                onChange={e=>setEditForm(f=>({...f,email:e.target.value}))}
+                placeholder="user@example.com"
+                prefix="✉"
+                type="email"
+              />
             </div>
             <div>
               <label style={{ fontSize:12, color:T.textDim, display:"block", marginBottom:5 }}>Company</label>
