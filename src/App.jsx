@@ -1026,21 +1026,36 @@ function parseICICIWords(pages) {
 
   // Use fixed grouping — adaptive tolerance merges lines that are 12pt apart
   // which is exactly the gap between rows in this PDF format
-  const groupFixed = (items, tol=4) => {
+  const groupFixed = (items, tol=6) => {
     const lineMap = {};
     items.forEach(it => {
       const key = Math.round(it.y / tol) * tol;
       if (!lineMap[key]) lineMap[key] = [];
       lineMap[key].push(it);
     });
+    // Sort each line by X and merge adjacent chars into words (gap < 3pt = same word)
     return Object.keys(lineMap)
       .sort((a,b) => Number(a)-Number(b))
-      .map(k => ({ y: Number(k), items: lineMap[k].sort((a,b)=>a.x-b.x) }));
+      .map(k => {
+        const sorted = lineMap[k].sort((a,b) => a.x - b.x);
+        // Merge chars that are very close together (pdfjs splits words char-by-char)
+        const merged = [];
+        sorted.forEach(it => {
+          const prev = merged[merged.length - 1];
+          if (prev && (it.x - (prev.x + (prev.w||prev.str.length*6))) < 3 && it.x > prev.x) {
+            prev.str += it.str;
+            prev.w = (prev.w||0) + (it.w||it.str.length*6);
+          } else {
+            merged.push({ ...it });
+          }
+        });
+        return { y: Number(k), items: merged };
+      });
   };
 
   pages.forEach(({ items }) => {
     if (!items.length) return;
-    const physLines = groupFixed(items, 4);
+    const physLines = groupFixed(items, 6);
 
     physLines.forEach(line => {
       const txt = line.items.map(i => i.str).join(" ");
