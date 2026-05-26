@@ -1024,38 +1024,32 @@ function parseICICIWords(pages) {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // FORMAT B — New A4 "Account Statement" (595pt wide, 2024+)
+  // FORMAT B — New A4 "Account Statement" (595pt, 2024+)
+  // Uses RAW TEXT approach — far more reliable than X/Y coordinate
+  // parsing for this PDF which emits individual chars via pdfjs.
+  //
+  // Raw text per line (from pdfjs joined):
+  //   "1 S1070358 04-May- UPI/109740 1050.00 30980.30"   ← row start
+  //   "2026 316919/milk"                                  ← year + desc cont
+  //   "payment/q8"                                        ← desc cont only
   // ═══════════════════════════════════════════════════════════════
-  // Exact X bands from measured PDF
-  const colB = x =>
-    x < 88   ? "sno"     :
-    x < 155  ? "txnid"   :
-    x < 296  ? "date"    :  // 161–296 (date col + cheque col, cheque always blank)
-    x < 358  ? "desc"    :  // 296–358
-    x < 427  ? "debit"   :  // 358–427  (Withdrawal Dr, measured at 363)
-    x < 494  ? "credit"  :  // 427–494  (Deposit Cr, measured at 430 and 446)
-               "balance";   // 494+     (measured at 497)
+  const MON_B = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
+                 jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
 
-  const MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
-                  jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
-  const normDate = parts => {
-    // Join all parts, stripping trailing hyphens before appending year
-    // e.g. ["04-May-", "2026"] → "04-May-2026"
-    const s = parts.map((p,i) => i===0 ? p : p.replace(/^[-\/]/, "")).join("").replace(/\s+/g, "");
-    // Match DD-Mon-YYYY or DD-Mon-YY
-    const m = s.match(/^(\d{1,2})[-\/](\w{3,})[-\/]?(\d{2,4})$/i);
-    if (m) {
-      const mo = MONTHS[m[2].toLowerCase().slice(0, 3)] || m[2];
-      const yr = m[3].length === 2 ? "20"+m[3] : m[3];
-      return `${m[1].padStart(2,"0")}/${mo}/${yr}`;
-    }
-    // Match DD/MM/YYYY
-    const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-    if (m2) {
-      const yr = m2[3].length === 2 ? "20"+m2[3] : m2[3];
-      return `${m2[1].padStart(2,"0")}/${m2[2].padStart(2,"0")}/${yr}`;
-    }
-    return s;
+  // Row-start: "1 S1070358 04-May- UPI/109740 1050.00 30980.30"
+  //   group 1 = sno, 2 = txnid, 3 = "DD-Mon-", 4 = desc_start (optional),
+  //   5 = amount, 6 = balance
+  const ROW_RE = /^(\d{1,3})\s+(S\d{5,})\s+(\d{1,2}-[A-Za-z]{3}-)\s*(.*?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/;
+  // Continuation with year: "2026 316919/milk"
+  const YEAR_RE = /^(\d{4})\s+(.*)$/;
+  // Skip patterns
+  const SKIP_B = /generated\s+on|page\s+\d+\s+of\s+\d+|legends\s+used|^s\.no\s+transaction|^account\s+(name|number|type|currency)|^ifsc|^customer\s+id|^available\s+balance|^total\s+effective|^\*this\s+is|^\d+\.\s+[A-Z]{2,}\s*-/i;
+
+  const normDateB = (part1, year) => {
+    const m = part1.match(/^(\d{1,2})-([A-Za-z]{3})-?$/i);
+    if (!m) return part1 + year;
+    const mo = MON_B[m[2].toLowerCase()] || m[2];
+    return `${m[1].padStart(2,"0")}/${mo}/${year}`;
   };
 
   const rowsB = [];
@@ -1063,88 +1057,73 @@ function parseICICIWords(pages) {
 
   const flushB = () => {
     if (!curB) return;
-    const date = normDate(curB.dateParts);
+    if (!curB.year) { curB = null; return; } // no year = incomplete, discard
+    const date = normDateB(curB.datePart, curB.year);
     const desc = curB.desc.join(" ").trim();
-    if (!date || (!curB.debit && !curB.credit)) { curB = null; return; }
-    rowsB.push([date, curB.txnid, desc, curB.debit||"", curB.credit||"", curB.balance||""]);
+    if (!date || !curB.amt) { curB = null; return; }
+    // Determine debit/credit by comparing prev balance
+    const amt  = parseFloat(curB.amt.replace(/,/g,""));
+    const bal  = parseFloat(curB.balance.replace(/,/g,""));
+    const prev = parseFloat((curB.prevBalance||"0").replace(/,/g,""));
+    let debit = "", credit = "";
+    if (prev > 0) {
+      if (Math.abs((prev - amt) - bal) < 0.02) debit  = curB.amt;
+      else if (Math.abs((prev + amt) - bal) < 0.02) credit = curB.amt;
+      else debit = curB.amt; // fallback — balance went down
+    } else {
+      debit = curB.amt; // first row, no prev — default debit
+    }
+    rowsB.push([date, curB.txnid, desc, debit, credit, curB.balance]);
     curB = null;
   };
 
-  // Use fixed grouping — adaptive tolerance merges lines that are 12pt apart
-  // which is exactly the gap between rows in this PDF format
-  const groupFixed = (items, tol=6) => {
-    const lineMap = {};
+  // Get raw text lines from all pages (same as what pdfjs produces)
+  const allLines = pages.flatMap(({ items }) => {
+    // Group items into lines by Y (6pt tolerance), join by space
+    const lm = {};
     items.forEach(it => {
-      const key = Math.round(it.y / tol) * tol;
-      if (!lineMap[key]) lineMap[key] = [];
-      lineMap[key].push(it);
+      const k = Math.round(it.y / 6) * 6;
+      if (!lm[k]) lm[k] = [];
+      lm[k].push(it);
     });
-    return Object.keys(lineMap)
-      .sort((a,b) => Number(a)-Number(b))
-      .map(k => ({ y: Number(k), items: lineMap[k].sort((a,b)=>a.x-b.x) }));
-  };
-
-  pages.forEach(({ items }) => {
-    if (!items.length) return;
-    const physLines = groupFixed(items, 6);
-
-    physLines.forEach(line => {
-      const txt = line.items.map(i => i.str).join(" ");
-      // Skip: page header/footer, legend section, column header row
-      if (!txt.trim()) return;
-      // Footer: "Generated on : 25 May'26 (10:57 AM)  Page 1 of 4"
-      if (/generated\s+on/i.test(txt)) return;
-      if (/page\s+\d+\s+of\s+\d+/i.test(txt)) return;
-      if (/^statement of transactions/i.test(txt)) return;
-      if (/^legends used/i.test(txt)) return;
-      if (/^\d+\.\s+[A-Z]{2,}\s*-/i.test(txt)) return; // "1. BBPS - ..."
-      if (/s\.no|withdrawal.*dr|deposit.*cr/i.test(txt) && /transaction/i.test(txt)) return;
-      if (/^account\s+(name|number|type|currency)/i.test(txt)) return;
-      if (/^(ifsc|customer\s+id|communication|total\s+effective)/i.test(txt)) return;
-      if (/^\*this\s+is\s+a\s+system/i.test(txt)) return;
-      // Any line where sno slot contains non-numeric text is header/footer
-      const _slots0 = {};
-      line.items.forEach(it => { const c = colB(it.x); (_slots0[c]||(_slots0[c]=[])).push(it.str); });
-      const _sno0 = (_slots0.sno||[]).join("").trim();
-      if (_sno0 && !/^\d{1,4}$/.test(_sno0)) return; // "Generated", "S.no", legend text etc
-
-      const slots = { sno:[], txnid:[], date:[], desc:[], debit:[], credit:[], balance:[] };
-      line.items.forEach(it => { const c = colB(it.x); slots[c].push(it.str.trim()); });
-
-      const sno    = slots.sno.join("").trim();
-      const txnid  = slots.txnid.join("").trim();
-      const dateTk = slots.date.join("").trim();
-      const desc   = slots.desc.join(" ").trim();
-      const debit  = slots.debit.find(isAmountStr) || "";
-      const credit = slots.credit.find(isAmountStr) || "";
-      const bal    = slots.balance.find(isAmountStr) || "";
-
-      // New row: serial number + transaction ID on same line
-      if (/^\d{1,4}$/.test(sno) && /^S\d{5,}/i.test(txnid)) {
-        flushB();
-        curB = {
-          txnid,
-          dateParts: dateTk ? [dateTk] : [],
-          desc: desc ? [desc] : [],
-          debit,
-          credit,
-          balance: bal
-        };
-        return;
-      }
-
-      // Continuation line — only if no sno (prevents stray header text being added)
-      if (curB && !(/^\d{1,4}$/.test(sno) && sno !== "")) {
-        if (dateTk && !isAmountStr(dateTk) && !/^(of|am|pm)$/i.test(dateTk)) curB.dateParts.push(dateTk);
-        if (desc && !/^(of|am|pm|page)$/i.test(desc)) curB.desc.push(desc);
-        if (debit  && !curB.debit)   curB.debit   = debit;
-        if (credit && !curB.credit)  curB.credit  = credit;
-        if (bal    && !curB.balance) curB.balance = bal;
-      }
-    });
+    return Object.keys(lm).sort((a,b)=>+a-+b)
+      .map(k => lm[k].sort((a,b)=>a.x-b.x).map(i=>i.str).join(" ").trim())
+      .filter(Boolean);
   });
-  flushB();
 
+  let prevBal = "";
+  allLines.forEach(line => {
+    if (SKIP_B.test(line)) { flushB(); return; }
+
+    const mRow = ROW_RE.exec(line);
+    if (mRow) {
+      if (curB) {
+        prevBal = curB.balance;
+        flushB();
+      }
+      curB = {
+        txnid:    mRow[2],
+        datePart: mRow[3],
+        year:     "",          // filled by next continuation line
+        desc:     mRow[4] ? [mRow[4]] : [],
+        amt:      mRow[5],
+        balance:  mRow[6],
+        prevBalance: prevBal,
+      };
+      return;
+    }
+
+    if (curB) {
+      const mYear = YEAR_RE.exec(line);
+      if (mYear && !curB.year) {
+        curB.year = mYear[1];
+        if (mYear[2].trim()) curB.desc.push(mYear[2].trim());
+      } else if (line.trim()) {
+        curB.desc.push(line.trim());
+      }
+    }
+  });
+  if (curB) { prevBal = curB.balance; flushB(); }
   const HDR_B = ["Date","Transaction ID","Description","Withdrawal (Dr)","Deposit (Cr)","Available Balance"];
   return rowsB.length ? { headers: HDR_B, rows: rowsB, _bankHint: "icici" } : null;
 }
