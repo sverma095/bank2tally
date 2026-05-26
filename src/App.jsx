@@ -822,17 +822,24 @@ async function extractWordItems(buf) {
 
 // ── Bank fingerprint detector ─────────────────────────────────────
 function detectBank(pages) {
-  const sample = pages.flatMap(p => p.items).slice(0, 150).map(it => it.str).join(" ").toLowerCase();
-  if (/icici\s*bank|icicibank|detailed\s*statement|cr\/dr.*transaction.*amount/i.test(sample)) return "icici";
-  if (/state\s*bank\s*of\s*india|\bsbi\b|sbchq|sbin\d{7}/i.test(sample))                      return "sbi";
-  if (/hdfc\s*bank|withdrawal\s*amt\.|deposit\s*amt\./i.test(sample))                          return "hdfc";
-  if (/axis\s*bank|tran\s*date.*particulars/i.test(sample))                                    return "axis";
-  if (/kotak\s*(mahindra|bank)/i.test(sample))                                                  return "kotak";
+  // Build two samples:
+  // 1. joined with spaces (works for merged words)
+  // 2. joined without spaces (works when pdfjs emits individual chars: "I C I C I" → "ICICI")
+  const rawItems = pages.flatMap(p => p.items).slice(0, 300).map(it => it.str);
+  const sample   = rawItems.join(" ").toLowerCase();
+  const compact  = rawItems.join("").toLowerCase();  // no spaces — catches "I C I C I B a n k"
+  const test     = s => sample.includes(s) || compact.includes(s);
+
+  if (test("icicibank") || test("icici bank") || /detailed\s*statement|cr\/dr.*transaction.*amount/i.test(sample)) return "icici";
+  if (test("state bank of india") || test("statebankofindia") || /\bsbi\b|sbchq|sbin\d{7}/i.test(sample)) return "sbi";
+  if (test("hdfc bank") || test("hdfcbank") || /withdrawal\s*amt\.|deposit\s*amt\./i.test(sample)) return "hdfc";
+  if (test("axis bank") || test("axisbank") || /tran\s*date.*particulars/i.test(sample))       return "axis";
+  if (test("kotak mahindra") || test("kotakbank") || /kotak/i.test(compact))                    return "kotak";
   if (/punjab\s*national\s*bank|\bpnb\b/i.test(sample))                                        return "pnb";
   if (/bank\s*of\s*baroda|\bbaroda\b/i.test(sample))                                           return "bob";
   if (/yes\s*bank/i.test(sample))                                                               return "yes";
   if (/idfc\s*(first|bank)/i.test(sample))                                                     return "idfc";
-  if (/canara\s*bank/i.test(sample))                                                            return "canara";
+  if (test("canara bank") || test("canarabank"))                                                 return "canara";
   if (/union\s*bank/i.test(sample))                                                             return "union";
   if (/bank\s*of\s*india/i.test(sample))                                                       return "boi";
   if (/federal\s*bank/i.test(sample))                                                           return "federal";
