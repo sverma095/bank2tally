@@ -2218,7 +2218,7 @@ function LoginScreen({ onLogin }) {
         const meta = session.user.user_metadata || {};
         const role = meta.role || "user";
         if (role === "admin") {
-          onLogin({ id: userId, name: meta.name || userEmail.split("@")[0], role: "admin", status: "approved", avatar: upper2(meta.name || userEmail), email: userEmail, sessionToken: session.access_token });
+          onLogin({ id: userId, name: meta.name || userEmail.split("@")[0], role: "admin", status: "approved", avatar: upper2(meta.name || userEmail), email: userEmail, mobile: profile?.mobile||"", mobile_verified: profile?.mobile_verified||false, sessionToken: session.access_token });
           return;
         }
         throw new Error("Your account is pending admin approval.");
@@ -3717,13 +3717,107 @@ function HistoryScreen({ history, onReimport, onDeleteEntry, onClearAll, onBack 
 // ══════════════════════════════════════════════════════════════════
 // SCREEN: Settings
 // ══════════════════════════════════════════════════════════════════
-function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyPort, setTallyPort, defaultLedger, setDefaultLedger, autoDetectLedger, setAutoDetectLedger }) {
+function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTallyHost, tallyPort, setTallyPort, defaultLedger, setDefaultLedger, autoDetectLedger, setAutoDetectLedger }) {
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null); // null | "ok" | "error"
+  const [testResult, setTestResult] = useState(null);
   const [testMsg, setTestMsg] = useState("");
 
+  // ── Profile edit state ────────────────────────────────────────
+  const [profForm, setProfForm]     = useState({ name: user?.name||"", company: user?.company||"", mobile: user?.mobile||"" });
+  const [profSaving, setProfSaving] = useState(false);
+  const [profErr, setProfErr]       = useState("");
+  const [profOk, setProfOk]         = useState("");
+
+  // ── Mobile OTP state ─────────────────────────────────────────
+  const [otpSent, setOtpSent]         = useState(false);
+  const [otpValue, setOtpValue]       = useState("");
+  const [otpExpected, setOtpExpected] = useState(""); // stored in state (mock OTP for demo)
+  const [otpSending, setOtpSending]   = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpErr, setOtpErr]           = useState("");
+  const [mobileVerified, setMobileVerified] = useState(user?.mobile_verified||false);
+
+  // Sync form when user changes
+  React.useEffect(() => {
+    setProfForm({ name: user?.name||"", company: user?.company||"", mobile: user?.mobile||"" });
+    setMobileVerified(user?.mobile_verified||false);
+  }, [user?.id]);
+
   const save = () => { setSaved(true); setTimeout(()=>setSaved(false),2000); };
+
+  // ── Save profile ──────────────────────────────────────────────
+  const saveProfile = async () => {
+    if (!profForm.name.trim()) return setProfErr("Name is required.");
+    setProfSaving(true); setProfErr(""); setProfOk("");
+    try {
+      const payload = {
+        name:    profForm.name.trim(),
+        company: profForm.company.trim(),
+        mobile:  profForm.mobile.trim(),
+        avatar:  profForm.name.trim().slice(0,2).toUpperCase(),
+        updated_at: new Date().toISOString(),
+      };
+      await sb.update("profiles", { id: user.id }, payload);
+      if (onUserUpdate) onUserUpdate({ ...user, ...payload });
+      setProfOk("Profile saved successfully!");
+      setTimeout(()=>setProfOk(""),3000);
+    } catch(e) { setProfErr("Save failed: "+e.message); }
+    setProfSaving(false);
+  };
+
+  // ── Send OTP (uses Supabase edge function or mock 4-digit code) ──
+  const sendOtp = async () => {
+    const mob = profForm.mobile.trim();
+    if (!/^[6-9]\d{9}$/.test(mob)) return setOtpErr("Enter a valid 10-digit Indian mobile number.");
+    setOtpSending(true); setOtpErr(""); setOtpValue("");
+    try {
+      // Generate a 4-digit OTP stored in Supabase profiles as otp_code+otp_expiry
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+      await sb.update("profiles", { id: user.id }, {
+        mobile: mob,
+        otp_code: code,
+        otp_expiry: expiry,
+        mobile_verified: false,
+      });
+      setOtpExpected(code); // keep in memory for verification
+      setOtpSent(true);
+      // In production: call an SMS gateway (Twilio/MSG91) here
+      // For now show the OTP in a toast (demo mode)
+      alert(\`[Demo] Your OTP is: \${code}\n(In production this would be sent via SMS)\`);
+    } catch(e) { setOtpErr("Failed to send OTP: "+e.message); }
+    setOtpSending(false);
+  };
+
+  // ── Verify OTP ────────────────────────────────────────────────
+  const verifyOtp = async () => {
+    if (otpValue.length !== 4) return setOtpErr("Enter the 4-digit OTP.");
+    setOtpVerifying(true); setOtpErr("");
+    try {
+      // Fetch stored OTP from DB to verify server-side
+      const rows = await sb.from("profiles", \`id=eq.\${user.id}&select=otp_code,otp_expiry\`);
+      const prof = rows?.[0];
+      if (!prof) throw new Error("Profile not found.");
+      if (!prof.otp_code) throw new Error("No OTP requested. Please send again.");
+      if (new Date(prof.otp_expiry) < new Date()) throw new Error("OTP expired. Please resend.");
+      if (prof.otp_code !== otpValue) throw new Error("Incorrect OTP. Please try again.");
+
+      // OTP correct — mark verified, clear OTP
+      await sb.update("profiles", { id: user.id }, {
+        mobile: profForm.mobile.trim(),
+        mobile_verified: true,
+        otp_code: null,
+        otp_expiry: null,
+      });
+      setMobileVerified(true);
+      setOtpSent(false); setOtpValue(""); setOtpExpected("");
+      if (onUserUpdate) onUserUpdate({ ...user, mobile: profForm.mobile.trim(), mobile_verified: true });
+      setProfOk("Mobile number verified!");
+      setTimeout(()=>setProfOk(""),3000);
+    } catch(e) { setOtpErr(e.message); }
+    setOtpVerifying(false);
+  };
 
   const runTest = async () => {
     setTesting(true); setTestResult(null); setTestMsg("");
@@ -3757,18 +3851,120 @@ function SettingsScreen({ user, onLogout, tally, tallyHost, setTallyHost, tallyP
     <div className="fade-in">
       <h2 style={{ fontSize:20, fontWeight:700, color:T.text, marginBottom:20 }}>Settings</h2>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-        {/* User */}
-        <Card>
-          <p style={{ fontWeight:600, fontSize:14, marginBottom:16, color:T.text }}>Account</p>
+        {/* Profile Card */}
+        <Card style={{ gridColumn:"1 / -1" }}>
           <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-            <div style={{ width:52, height:52, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, color:"#fff" }}>{user?.avatar}</div>
-            <div>
-              <div style={{ fontWeight:600, fontSize:15, color:T.text }}>{user?.name}</div>
+            <div style={{ width:60, height:60, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, fontWeight:700, color:"#fff", flexShrink:0 }}>
+              {(profForm.name||user?.name||"?").slice(0,2).toUpperCase()}
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:16, color:T.text }}>{user?.name}</div>
               <div style={{ fontSize:12, color:T.textDim }}>{user?.email}</div>
-              <Pill color="blue" size="xs">{user?.role}</Pill>
+              <div style={{ display:"flex", gap:6, marginTop:4 }}>
+                <Pill color="blue" size="xs">{fromDbRole(user?.role)}</Pill>
+                {mobileVerified && <Pill color="green" size="xs">📱 Mobile Verified</Pill>}
+              </div>
+            </div>
+            <Btn variant="danger" onClick={onLogout} icon="→" size="sm">Sign Out</Btn>
+          </div>
+
+          {profOk && <div style={{ background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:8, padding:"9px 14px", fontSize:12, color:T.green, marginBottom:12 }}>✓ {profOk}</div>}
+          {profErr && <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"9px 14px", fontSize:12, color:T.red, marginBottom:12 }}>✕ {profErr}</div>}
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+            <div>
+              <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Full Name *</label>
+              <Input value={profForm.name} onChange={e=>setProfForm(f=>({...f,name:e.target.value}))} placeholder="Your full name" prefix="👤" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Company</label>
+              <Input value={profForm.company} onChange={e=>setProfForm(f=>({...f,company:e.target.value}))} placeholder="Your company name" prefix="🏢" />
             </div>
           </div>
-          <Btn variant="danger" onClick={onLogout} fullWidth icon="→">Sign Out</Btn>
+
+          {/* Email — read-only, from auth */}
+          <div style={{ marginBottom:14 }}>
+            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Email Address <span style={{color:T.textDim,fontSize:11}}>(from login — contact admin to change)</span></label>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:8, border:`1px solid ${T.border}`, background:T.bg, fontSize:13, color:T.textMid }}>
+              <span>✉</span>
+              <span style={{ flex:1 }}>{user?.email || <em style={{color:T.textDim}}>No email on file</em>}</span>
+              <Pill color="green" size="xs">✓ Auth</Pill>
+            </div>
+          </div>
+
+          {/* Mobile with OTP verification */}
+          <div style={{ marginBottom:16 }}>
+            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>
+              Mobile Number
+              {mobileVerified && <span style={{ marginLeft:8, color:T.green, fontSize:11 }}>✓ Verified</span>}
+              {!mobileVerified && profForm.mobile && <span style={{ marginLeft:8, color:T.amber||"#f59e0b", fontSize:11 }}>⚠ Not verified</span>}
+            </label>
+            <div style={{ display:"flex", gap:8 }}>
+              <div style={{ flex:1 }}>
+                <Input
+                  value={profForm.mobile}
+                  onChange={e=>{ setProfForm(f=>({...f,mobile:e.target.value.replace(/\D/g,"")})); setMobileVerified(false); setOtpSent(false); setOtpErr(""); }}
+                  placeholder="10-digit mobile number"
+                  prefix="📱"
+                  maxLength={10}
+                />
+              </div>
+              <Btn
+                size="sm"
+                variant={mobileVerified?"success":"secondary"}
+                onClick={mobileVerified ? undefined : sendOtp}
+                disabled={otpSending || mobileVerified || !profForm.mobile}
+                icon={otpSending?"⏳":mobileVerified?"✓":"📤"}
+              >
+                {otpSending ? "Sending…" : mobileVerified ? "Verified" : otpSent ? "Resend OTP" : "Send OTP"}
+              </Btn>
+            </div>
+
+            {/* OTP input */}
+            {otpSent && !mobileVerified && (
+              <div style={{ marginTop:10, padding:"14px 16px", background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:10 }}>
+                <p style={{ fontSize:12, color:T.textMid, marginBottom:10 }}>Enter the 4-digit OTP sent to +91 {profForm.mobile}</p>
+                {otpErr && <p style={{ fontSize:11, color:T.red, marginBottom:8 }}>✕ {otpErr}</p>}
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  {/* 4 individual OTP boxes */}
+                  {[0,1,2,3].map(i => (
+                    <input
+                      key={i}
+                      id={\`otp-\${i}\`}
+                      maxLength={1}
+                      value={otpValue[i]||""}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/,"");
+                        const arr = otpValue.split("");
+                        arr[i] = v;
+                        const next = arr.join("").slice(0,4);
+                        setOtpValue(next);
+                        setOtpErr("");
+                        if (v && i < 3) document.getElementById(\`otp-\${i+1}\`)?.focus();
+                      }}
+                      onKeyDown={e => {
+                        if (e.key==="Backspace" && !otpValue[i] && i>0) document.getElementById(\`otp-\${i-1}\`)?.focus();
+                      }}
+                      style={{ width:44, height:48, textAlign:"center", fontSize:20, fontWeight:700, borderRadius:10, border:`2px solid \${otpValue[i]?T.accent:T.border}`, background:T.surface, color:T.text, outline:"none", fontFamily:T.font }}
+                    />
+                  ))}
+                  <Btn
+                    variant="primary"
+                    onClick={verifyOtp}
+                    disabled={otpVerifying || otpValue.length < 4}
+                    icon={otpVerifying?"⏳":"✓"}
+                  >
+                    {otpVerifying ? "Verifying…" : "Verify"}
+                  </Btn>
+                </div>
+                <p style={{ fontSize:11, color:T.textDim, marginTop:8 }}>OTP valid for 10 minutes</p>
+              </div>
+            )}
+          </div>
+
+          <Btn variant="primary" onClick={saveProfile} disabled={profSaving} icon={profSaving?"⏳":"💾"}>
+            {profSaving ? "Saving…" : "Save Profile"}
+          </Btn>
         </Card>
 
         {/* Tally connection */}
@@ -3906,7 +4102,7 @@ function UserManagementScreen({ adminUser }) {
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const profiles = await sb.from("profiles", "select=*&order=created_at.asc&limit=500");
+      const profiles = await sb.from("profiles", "select=id,name,email,role,status,company,avatar,mobile,mobile_verified,created_at,approved_by,approved_at&order=created_at.asc&limit=500");
 
       // Fetch emails from auth admin endpoint (requires admin JWT, best-effort)
       let authEmailMap = {};
@@ -4206,13 +4402,13 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
           </div>
         ) : (
           <>
-            <div style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 2fr", gap:0, padding:"10px 20px", borderBottom:`1px solid ${T.border}`, background:T.surface }}>
-              {["User","Company","Role","Status","Actions"].map(h => (
+            <div style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 1.2fr 2fr", gap:0, padding:"10px 20px", borderBottom:`1px solid ${T.border}`, background:T.surface }}>
+              {["User","Company","Role","Status","Mobile","Actions"].map(h => (
                 <span key={h} style={{ fontSize:11, fontWeight:600, color:T.textDim, textTransform:"uppercase", letterSpacing:"0.06em" }}>{h}</span>
               ))}
             </div>
             {filtered.map((u, idx) => (
-              <div key={u.id} className="row-hover" style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 2fr", gap:0, padding:"13px 20px", borderBottom:idx<filtered.length-1?`1px solid ${T.border}`:"none", alignItems:"center", transition:"background 0.15s" }}>
+              <div key={u.id} className="row-hover" style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 1fr 1fr 1.2fr 2fr", gap:0, padding:"13px 20px", borderBottom:idx<filtered.length-1?`1px solid ${T.border}`:"none", alignItems:"center", transition:"background 0.15s" }}>
                 {/* User */}
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <div style={{ width:36, height:36, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#fff", flexShrink:0 }}>
@@ -4229,6 +4425,14 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
                 <div><Pill color={roleColor(u.role)} size="xs">{fromDbRole(u.role)}</Pill></div>
                 {/* Status */}
                 <div><Pill color={statusColor(u.status)} size="xs" dot>{u.status||"unknown"}</Pill></div>
+                {/* Mobile */}
+                <div style={{ fontSize:11 }}>
+                  {u.mobile ? (
+                    <span style={{ color: u.mobile_verified ? T.green : T.amber||"#f59e0b" }}>
+                      {u.mobile_verified ? "✓ " : "⚠ "}{u.mobile}
+                    </span>
+                  ) : <span style={{ color:T.textDim }}>—</span>}
+                </div>
                 {/* Actions */}
                 <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                   {/* View */}
@@ -4342,6 +4546,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
               {[
                 ["🏢","Company",    viewUser.company||"—"],
                 ["✉","Email",      viewUser.email||"—"],
+                ["📱","Mobile",     viewUser.mobile ? `${viewUser.mobile}${viewUser.mobile_verified?" ✓ Verified":" ⚠ Unverified"}` : "—"],
                 ["🪪","User ID",    viewUser.id],
                 ["📅","Joined",     viewUser.created_at ? new Date(viewUser.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—"],
                 ["✅","Approved By",users.find(x=>x.id===viewUser.approved_by)?.name || viewUser.approved_by || "—"],
@@ -4609,7 +4814,7 @@ function AppInner() {
         if (profile && !profile.email && session.user.email) {
           try { await sb.update("profiles", { id: session.user.id }, { email: session.user.email }); } catch {}
         }
-        setUser({ id: session.user.id, name, role, status, avatar, company: profile?.company || "", email: session.user.email, sessionToken: session.access_token });
+        setUser({ id: session.user.id, name, role, status, avatar, company: profile?.company || "", email: session.user.email, mobile: profile?.mobile || "", mobile_verified: profile?.mobile_verified || false, sessionToken: session.access_token });
         setScreen(SCREENS.DASHBOARD);
         if (role === "admin") {
           sb.from("approval_requests", "status=eq.pending&select=id")
@@ -4866,7 +5071,7 @@ function AppInner() {
           {screen === SCREENS.LEDGER && <LedgerScreen rows={rows} setRows={setRows} onNext={()=>setScreen(SCREENS.PREVIEW)} onBack={()=>setScreen(SCREENS.COLUMN_MAP)} auditLog={auditLog} setAuditLog={setAuditLog} user={user} tally={tally} />}
           {screen === SCREENS.PREVIEW && <PreviewScreen rows={rows} filename={filename} selectedCompanies={selectedCompanies} onBack={()=>setScreen(SCREENS.LEDGER)} onImport={onImport} auditLog={auditLog} tally={tally} />}
           {screen === SCREENS.HISTORY && <HistoryScreen history={history} onReimport={onReimport} onDeleteEntry={deleteHistoryEntry} onClearAll={clearAllHistory} onBack={()=>setScreen(SCREENS.DASHBOARD)} />}
-          {screen === SCREENS.SETTINGS && <SettingsScreen user={user} onLogout={onLogout} tally={tally} tallyHost={tallyHost} setTallyHost={setTallyHost} tallyPort={tallyPort} setTallyPort={setTallyPort} defaultLedger={defaultLedger} setDefaultLedger={setDefaultLedger} autoDetectLedger={autoDetectLedger} setAutoDetectLedger={setAutoDetectLedger} />}
+          {screen === SCREENS.SETTINGS && <SettingsScreen user={user} onLogout={onLogout} onUserUpdate={u=>setUser(u)} tally={tally} tallyHost={tallyHost} setTallyHost={setTallyHost} tallyPort={tallyPort} setTallyPort={setTallyPort} defaultLedger={defaultLedger} setDefaultLedger={setDefaultLedger} autoDetectLedger={autoDetectLedger} setAutoDetectLedger={setAutoDetectLedger} />}
           {screen === SCREENS.USER_MGMT && isAdmin && <UserManagementScreen adminUser={user} />}
         </div>
       </div>
