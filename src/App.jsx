@@ -313,7 +313,7 @@ async function fetchTallyCompanies(host, port) {
   // Format E: Fetch via GETCOLLECTION — works on Tally Prime 2.x+
   const xmlE = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT><SVCURRENTCOMPANY></SVCURRENTCOMPANY></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
-  const formats = [xmlA, xmlE, xmlC, xmlD, xmlB];
+  const formats = [xmlA, xmlC, xmlD, xmlB, xmlE]; // xmlE (List of Companies) last — can crash older Tally
   let lastRaw = "";
 
   for (const xml of formats) {
@@ -413,16 +413,36 @@ async function testTallyConnection(host, port) {
   if (!_extensionReady) {
     throw new Error("Bank2Tally Connector extension not detected. Please install it from the instructions below, then refresh this page.");
   }
-  // Use the safest possible Tally XML — just ask for the license info.
-  // This is a pure Export Data request with no TDL Form/Parts and never crashes Tally.
-  const safeXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Companies</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
-  const res = await sendToExtension({
-    type: "TALLY_REQUEST",   // use REQUEST not PING — extension sends our XML, not its own
-    host, port,
-    body: safeXml,
-  }, 8000);
-  if (res.success) return true;
-  throw new Error(res.error || "Extension is installed but cannot reach Tally. Make sure Tally is open on this computer.");
+
+  // ── CRITICAL: never use "List of Companies" or "Day Book" for ping —
+  // those trigger full data exports and can crash/freeze older Tally Prime builds.
+  //
+  // The safest possible test: send a HEADER-only "GetLicenseInfo" request.
+  // Tally replies with license XML and does ZERO company/data processing.
+  // If that fails, fall back to a SVCURRENTCOMPANY query (read-only variable lookup).
+  // Both are read-only and never cause Tally to close.
+
+  const pingXmls = [
+    // 1. License info — absolutely safe, no company needed, no data loaded
+    `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>License Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`,
+    // 2. Current company name variable read — lightweight, just reads a system var
+    `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Company Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`,
+    // 3. List of Primary Groups — small static list, never heavy
+    `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Primary Groups</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`,
+  ];
+
+  let lastErr = "";
+  for (const xml of pingXmls) {
+    try {
+      const res = await sendToExtension({ type: "TALLY_REQUEST", host, port, body: xml }, 6000);
+      if (res.success) return true;
+      lastErr = res.error || "No response";
+    } catch(e) {
+      lastErr = e.message;
+      if (e.message === "EXTENSION_NOT_READY") throw e;
+    }
+  }
+  throw new Error(lastErr || "Extension is installed but cannot reach Tally. Make sure Tally is open on this computer.");
 }
 
 // ── useTallyGateway hook ─────────────────────────────────────────
