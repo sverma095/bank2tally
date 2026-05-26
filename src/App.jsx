@@ -3816,7 +3816,7 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
     setOtpVerifying(true); setOtpErr("");
     try {
       // Fetch stored OTP from DB to verify server-side
-      const rows = await sb.from("profiles", \`id=eq.\${user.id}&select=otp_code,otp_expiry\`);
+      const rows = await sb.from("profiles", `id=eq.${user.id}&select=otp_code,otp_expiry`);
       const prof = rows?.[0];
       if (!prof) throw new Error("Profile not found.");
       if (!prof.otp_code) throw new Error("No OTP requested. Please send again.");
@@ -3950,7 +3950,7 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
                   {[0,1,2,3].map(i => (
                     <input
                       key={i}
-                      id={\`otp-\${i}\`}
+                      id={`otp-${i}`}
                       maxLength={1}
                       value={otpValue[i]||""}
                       onChange={e => {
@@ -3960,12 +3960,12 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
                         const next = arr.join("").slice(0,4);
                         setOtpValue(next);
                         setOtpErr("");
-                        if (v && i < 3) document.getElementById(\`otp-\${i+1}\`)?.focus();
+                        if (v && i < 3) document.getElementById(`otp-${i+1}`)?.focus();
                       }}
                       onKeyDown={e => {
-                        if (e.key==="Backspace" && !otpValue[i] && i>0) document.getElementById(\`otp-\${i-1}\`)?.focus();
+                        if (e.key==="Backspace" && !otpValue[i] && i>0) document.getElementById(`otp-${i-1}`)?.focus();
                       }}
-                      style={{ width:44, height:48, textAlign:"center", fontSize:20, fontWeight:700, borderRadius:10, border:`2px solid \${otpValue[i]?T.accent:T.border}`, background:T.surface, color:T.text, outline:"none", fontFamily:T.font }}
+                      style={{ width:44, height:48, textAlign:"center", fontSize:20, fontWeight:700, borderRadius:10, border:`2px solid ${otpValue[i]?T.accent:T.border}`, background:T.surface, color:T.text, outline:"none", fontFamily:T.font }}
                     />
                   ))}
                   <Btn
