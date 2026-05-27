@@ -2964,24 +2964,32 @@ function UploadScreen({ onParsed, selectedCompanies, setSelectedCompanies, tally
           </div>
         )}
 
-        {displayCompanies.length > 0 && (
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-            {displayCompanies.map(c => {
-              const sel = selectedCompanies.includes(c.id);
-              return (
-                <button key={c.id} onClick={() => setSelectedCompanies(p => sel ? p.filter(x=>x!==c.id) : [...p,c.id])}
-                  style={{ padding:"8px 14px", borderRadius:9, fontSize:12, fontWeight:500, cursor:"pointer", transition:"all 0.15s", fontFamily:T.font,
-                    border: sel ? `2px solid ${T.accent}` : `1px solid ${T.border}`,
-                    background: sel ? T.accentDim : T.surface,
-                    color: sel ? T.accent : T.textMid,
-                    boxShadow: sel ? `0 0 12px ${T.accentGlow}` : "none" }}>
-                  {sel && "✓ "}{c.name}
-                  {c.state && <span style={{ marginLeft:6, fontSize:10, opacity:0.6 }}>· {c.state}</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {(() => {
+          // Merge Tally companies + manually-added ad-hoc companies
+          const adHoc = Object.values(window.__adHocCompanies || {});
+          const allCos = [...displayCompanies, ...adHoc.filter(a => !displayCompanies.find(d => d.id === a.id))];
+          if (!allCos.length) return null;
+          return (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+              {allCos.map(c => {
+                const sel = selectedCompanies.includes(c.id);
+                const isAdHoc = !!(window.__adHocCompanies||{})[c.id];
+                return (
+                  <button key={c.id} onClick={() => setSelectedCompanies(p => sel ? p.filter(x=>x!==c.id) : [...p,c.id])}
+                    style={{ padding:"8px 14px", borderRadius:9, fontSize:12, fontWeight:500, cursor:"pointer", transition:"all 0.15s", fontFamily:T.font,
+                      border: sel ? `2px solid ${isAdHoc ? T.green : T.accent}` : `1px solid ${T.border}`,
+                      background: sel ? (isAdHoc ? T.greenDim : T.accentDim) : T.surface,
+                      color: sel ? (isAdHoc ? T.green : T.accent) : T.textMid,
+                      boxShadow: sel ? `0 0 12px ${T.accentGlow}` : "none" }}>
+                    {sel && "✓ "}{c.name}
+                    {isAdHoc && <span style={{ marginLeft:5, fontSize:9, opacity:0.7 }}>manual</span>}
+                    {c.state && <span style={{ marginLeft:6, fontSize:10, opacity:0.6 }}>· {c.state}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* Manual entry if Tally offline */}
         {tally.status === "error" && (
@@ -3924,19 +3932,28 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
         {/* Profile Card */}
         <Card style={{ gridColumn:"1 / -1" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-            <div style={{ width:60, height:60, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, fontWeight:700, color:"#fff", flexShrink:0 }}>
+          {/* Profile header */}
+          <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:22, padding:"16px 18px", borderRadius:12, background:`linear-gradient(135deg, ${T.accentDim}88, ${T.surface})`, border:`1px solid ${T.accent}22` }}>
+            <div style={{ width:64, height:64, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:`0 4px 20px ${T.accent}55` }}>
               {(profForm.name||user?.name||"?").slice(0,2).toUpperCase()}
             </div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontWeight:700, fontSize:16, color:T.text }}>{user?.name}</div>
-              <div style={{ fontSize:12, color:T.textDim }}>{user?.email}</div>
-              <div style={{ display:"flex", gap:6, marginTop:4 }}>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontWeight:700, fontSize:17, color:T.text, marginBottom:3 }}>{user?.name || "—"}</div>
+              {/* Email — high contrast so it's always readable */}
+              <div style={{ fontSize:13, color:"#94a3b8", fontFamily:T.mono, marginBottom:5, display:"flex", alignItems:"center", gap:6 }}>
+                <span style={{ fontSize:11, opacity:0.7 }}>✉</span>
+                <span style={{ color: user?.email ? "#cbd5e1" : "#64748b", fontStyle: user?.email ? "normal" : "italic" }}>
+                  {user?.email || "No email on file"}
+                </span>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <Pill color="blue" size="xs">{fromDbRole(user?.role)}</Pill>
-                {mobileVerified && <Pill color="green" size="xs">📱 Mobile Verified</Pill>}
+                <Pill color={user?.status==="approved"?"green":"amber"} size="xs">{user?.status||"pending"}</Pill>
+                {mobileVerified && <Pill color="green" size="xs">📱 Verified</Pill>}
+                {user?.company && <Pill color="gray" size="xs">🏢 {user.company}</Pill>}
               </div>
             </div>
-            <Btn variant="danger" onClick={onLogout} icon="→" size="sm">Sign Out</Btn>
+            <Btn variant="danger" onClick={onLogout} icon="🚪" size="sm">Sign Out</Btn>
           </div>
 
           {profOk && <div style={{ background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:8, padding:"9px 14px", fontSize:12, color:T.green, marginBottom:12 }}>✓ {profOk}</div>}
@@ -3955,11 +3972,16 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
           {/* Email — read-only, from auth */}
           <div style={{ marginBottom:14 }}>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Email Address <span style={{color:T.textDim,fontSize:11}}>(from login — contact admin to change)</span></label>
-            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:8, border:`1px solid ${T.border}`, background:T.bg, fontSize:13, color:T.textMid }}>
-              <span>✉</span>
-              <span style={{ flex:1 }}>{user?.email || <em style={{color:T.textDim}}>No email on file</em>}</span>
-              <Pill color="green" size="xs">✓ Auth</Pill>
+            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>
+              Email Address
+              <span style={{ marginLeft:6, color:"#64748b", fontSize:11 }}>(managed by Supabase Auth · contact admin to change)</span>
+            </label>
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:8, border:`1px solid ${T.accent}33`, background:`${T.accentDim}55`, fontSize:13 }}>
+              <span style={{ fontSize:15 }}>✉</span>
+              <span style={{ flex:1, color: user?.email ? "#e2e8f0" : "#64748b", fontStyle: user?.email ? "normal" : "italic", fontFamily:T.mono, fontSize:12 }}>
+                {user?.email || "No email on file — ask admin to update your profile"}
+              </span>
+              {user?.email && <Pill color="green" size="xs">✓ Verified</Pill>}
             </div>
           </div>
 
@@ -4173,7 +4195,17 @@ function UserManagementScreen({ adminUser }) {
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const profiles = await sb.from("profiles", "select=id,name,email,role,status,company,avatar,mobile,mobile_verified,created_at,approved_by,approved_at&order=created_at.asc&limit=500");
+      // Try with email column first; fall back gracefully if column doesn't exist yet
+      let profiles;
+      try {
+        profiles = await sb.from("profiles", "select=id,name,email,role,status,company,avatar,mobile,mobile_verified,created_at,approved_by,approved_at&order=created_at.asc&limit=500");
+      } catch(emailErr) {
+        if (/email.*not exist|column.*email/i.test(emailErr.message)) {
+          // email column not yet added — fetch without it and notify admin
+          profiles = await sb.from("profiles", "select=id,name,role,status,company,avatar,mobile,mobile_verified,created_at,approved_by,approved_at&order=created_at.asc&limit=500");
+          notify("⚠ profiles.email column missing. Run in Supabase SQL Editor: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email text; — then refresh.", "error");
+        } else throw emailErr;
+      }
 
       // Fetch emails from auth admin endpoint (requires admin JWT, best-effort)
       let authEmailMap = {};
