@@ -592,7 +592,8 @@ const fmtDate = v => {
 const fmtDateShort = v => {
   if (!v) return "";
   const d = parseIndianDate(v);
-  return isNaN(d) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  // Always show year — Tally needs full dates and user needs to verify the year
+  return isNaN(d) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
 const aiLedger = desc => {
@@ -3383,7 +3384,7 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
                     <input type="checkbox" checked={selectedRows.has(r.id)} onChange={()=>toggleSelect(r.id)}
                       style={{ accentColor:T.accent, cursor:"pointer" }} />
                   </td>
-                  <td style={{ padding:"8px 12px", color:T.textMid, whiteSpace:"nowrap", fontFamily:T.mono, fontSize:11 }}>{fmtDateShort(r.date)}</td>
+                  <td style={{ padding:"8px 12px", color:T.textMid, whiteSpace:"nowrap", fontFamily:T.mono, fontSize:11 }}>{fmtDate(r.date)}</td>
                   <td style={{ padding:"8px 12px", maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color:T.text }} title={r.narration}>{r.narration}</td>
                   <td style={{ padding:"8px 12px", color:T.textDim, fontFamily:T.mono, fontSize:11 }}>{r.ref||"—"}</td>
                   <td style={{ padding:"8px 12px", color:T.red, fontWeight:500, textAlign:"right", fontFamily:T.mono }}>{r.debit ? fmt(r.debit) : ""}</td>
