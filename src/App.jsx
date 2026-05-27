@@ -2144,12 +2144,10 @@ function Steps({ steps, current }) {
 
 function StatCard({ icon, label, value, sub, color=T.accent }) {
   return (
-    <Card style={{ padding:"16px 20px", position:"relative", overflow:"hidden" }}>
-      <div style={{ position:"absolute", top:-10, right:-10, fontSize:48, opacity:0.06 }}>{icon}</div>
-      <div style={{ fontSize:22, marginBottom:6 }}>{icon}</div>
-      <div style={{ fontSize:22, fontWeight:700, color, letterSpacing:"-0.5px" }}>{value}</div>
-      <div style={{ fontSize:12, color:T.textDim, marginTop:2 }}>{label}</div>
-      {sub && <div style={{ fontSize:11, color:T.textMid, marginTop:4 }}>{sub}</div>}
+    <Card style={{ padding:"18px 20px", position:"relative", overflow:"hidden", borderLeft:`3px solid ${color}` }}>
+      <div style={{ fontSize:24, fontWeight:800, color, letterSpacing:"-0.5px", marginBottom:4 }}>{value}</div>
+      <div style={{ fontSize:12, fontWeight:600, color:T.text, marginBottom:2 }}>{label}</div>
+      {sub && <div style={{ fontSize:11, color:T.textSub, marginTop:2 }}>{sub}</div>}
     </Card>
   );
 }
@@ -2833,7 +2831,7 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
           <div>
-            <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.6px", background:"linear-gradient(135deg, #eef2ff 50%, #3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Dashboard</h2>
+            <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.6px", color:T.text }}>Dashboard</h2>
             <p style={{ color:T.textMid, fontSize:13, marginTop:3 }}>Welcome back, <strong style={{color:T.text}}>{user?.name?.split(" ")[0]}</strong> 👋</p>
           </div>
         </div>
@@ -2853,11 +2851,11 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       </div>
 
       {/* Daily Motivation */}
-      <div style={{ background:"linear-gradient(135deg, rgba(61,127,255,0.07), rgba(180,124,255,0.07))", border:"1px solid rgba(61,127,255,0.18)", borderRadius:14, padding:"12px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:14 }}>
-        <div style={{ fontSize:26, flexShrink:0 }}>💡</div>
+      <div style={{ background:"rgba(37,99,235,0.04)", border:"1px solid rgba(37,99,235,0.14)", borderRadius:12, padding:"12px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:14 }}>
+        <div style={{ width:3, alignSelf:"stretch", borderRadius:2, background:T.accent, flexShrink:0 }} />
         <div>
           <p style={{ fontSize:12, color:T.textMid, lineHeight:1.6, fontStyle:"italic", marginBottom:2 }}>"{todayQuote.text}"</p>
-          <p style={{ fontSize:10, color:T.textDim, fontWeight:600 }}>— {todayQuote.author}</p>
+          <p style={{ fontSize:10, color:T.textSub, fontWeight:600 }}>— {todayQuote.author}</p>
         </div>
       </div>
 
@@ -2876,13 +2874,17 @@ function DashboardScreen({ history, setScreen, user, tally }) {
         </div>
         {history.length === 0 ? (
           <div style={{ textAlign:"center", padding:"40px 0", color:T.textDim }}>
-            <div style={{ fontSize:36, marginBottom:10 }}>📂</div>
-            <p style={{ fontSize:14 }}>No imports yet. Start your first import →</p>
+            <div style={{ width:48, height:48, borderRadius:12, background:T.accentDim, margin:"0 auto 12px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <div style={{ width:18, height:22, borderRadius:3, border:`2px solid ${T.accent}`, opacity:0.5 }} />
+            </div>
+            <p style={{ fontSize:14, color:T.textSub, fontWeight:500 }}>No imports yet — start your first import</p>
           </div>
         ) : history.slice(0,5).map(h => (
           <div key={h.id} className="row-hover" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"11px 14px", borderRadius:9, marginBottom:4, cursor:"pointer", transition:"background 0.15s" }}>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <div style={{ width:36, height:36, borderRadius:9, background:T.accentDim, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>📄</div>
+              <div style={{ width:36, height:36, borderRadius:9, background:T.accentDim, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:T.accent, flexShrink:0 }}>
+                {h.filename?.split(".").pop().toUpperCase().slice(0,3)||"XLS"}
+              </div>
               <div>
                 <div style={{ fontWeight:500, fontSize:13, color:T.text }}>{h.filename}</div>
                 <div style={{ fontSize:11, color:T.textDim }}>{h.date} · {h.company}</div>
@@ -2988,16 +2990,26 @@ function UploadScreen({ onParsed, selectedCompanies, setSelectedCompanies, tally
                 const sel = selectedCompanies.includes(c.id);
                 const isAdHoc = !!(window.__adHocCompanies||{})[c.id];
                 return (
-                  <button key={c.id} onClick={() => setSelectedCompanies(p => sel ? p.filter(x=>x!==c.id) : [...p,c.id])}
-                    style={{ padding:"8px 14px", borderRadius:9, fontSize:12, fontWeight:500, cursor:"pointer", transition:"all 0.15s", fontFamily:T.font,
-                      border: sel ? `2px solid ${isAdHoc ? T.green : T.accent}` : `1px solid ${T.border}`,
-                      background: sel ? (isAdHoc ? T.greenDim : T.accentDim) : T.surface,
-                      color: sel ? (isAdHoc ? T.green : T.accent) : T.textMid,
-                      boxShadow: sel ? `0 0 12px ${T.accentGlow}` : "none" }}>
-                    {sel && "✓ "}{c.name}
-                    {isAdHoc && <span style={{ marginLeft:5, fontSize:9, opacity:0.7 }}>manual</span>}
-                    {c.state && <span style={{ marginLeft:6, fontSize:10, opacity:0.6 }}>· {c.state}</span>}
-                  </button>
+                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:0, borderRadius:9, overflow:"hidden",
+                    border: sel ? `2px solid ${isAdHoc ? T.green : T.accent}` : `1px solid ${T.border}`,
+                    background: sel ? (isAdHoc ? T.greenDim : T.accentDim) : T.surface,
+                    boxShadow: sel ? `0 0 0 3px ${isAdHoc ? T.green : T.accent}18` : "none",
+                    transition:"all 0.15s" }}>
+                    <button onClick={() => setSelectedCompanies(p => sel ? p.filter(x=>x!==c.id) : [...p,c.id])}
+                      style={{ padding:"7px 12px", fontSize:12, fontWeight:sel?600:500, cursor:"pointer", border:"none", background:"transparent",
+                        color: sel ? (isAdHoc ? T.green : T.accent) : T.textMid, fontFamily:T.font }}>
+                      {sel && <span style={{marginRight:4}}>✓</span>}{c.name}
+                      {isAdHoc && <span style={{ marginLeft:5, fontSize:9, opacity:0.65, fontWeight:400 }}>manual</span>}
+                      {c.state && !isAdHoc && <span style={{ marginLeft:5, fontSize:10, opacity:0.6 }}>· {c.state}</span>}
+                    </button>
+                    {isAdHoc && (
+                      <button title="Remove company" onClick={() => {
+                        delete (window.__adHocCompanies||{})[c.id];
+                        setSelectedCompanies(p => p.filter(x=>x!==c.id));
+                      }} style={{ padding:"7px 9px 7px 4px", fontSize:13, border:"none", background:"transparent", cursor:"pointer",
+                        color: T.red, fontFamily:T.font, lineHeight:1, fontWeight:700 }}>×</button>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -5229,12 +5241,12 @@ function AppInner() {
 
   const isAdmin = user?.role === "admin";
   const NAV = [
-    { id:SCREENS.DASHBOARD, label:"Dashboard",  icon:"📊" },
-    { id:SCREENS.UPLOAD,    label:"New Import",  icon:"⬆" },
-    { id:SCREENS.HISTORY,   label:"History",     icon:"📋" },
-    { id:SCREENS.SETTINGS,  label:"Settings",    icon:"⚙" },
+    { id:SCREENS.DASHBOARD, label:"Dashboard",  abbr:"DB" },
+    { id:SCREENS.UPLOAD,    label:"New Import",  abbr:"NI" },
+    { id:SCREENS.HISTORY,   label:"History",     abbr:"HX" },
+    { id:SCREENS.SETTINGS,  label:"Settings",    abbr:"ST" },
     ...(user?.role === "admin" ? [
-      { id:SCREENS.USER_MGMT, label:"Users",     icon:"👥", badge: pendingCount > 0 ? pendingCount : null },
+      { id:SCREENS.USER_MGMT, label:"Users",     abbr:"US", badge: pendingCount > 0 ? pendingCount : null },
     ] : []),
   ];
 
@@ -5267,17 +5279,26 @@ function AppInner() {
           <nav style={{ flex:1, padding:"14px 10px" }}>
             {NAV.map(n=>(
               <button key={n.id} onClick={()=>setScreen(n.id)}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, fontSize:13, fontWeight:screen===n.id?700:500, fontFamily:T.font, cursor:"pointer", border:n.badge?`1px solid ${T.amber}66`:"none", marginBottom:2, transition:"all 0.15s",
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:0, padding:"0", borderRadius:8, fontSize:13, fontFamily:T.font, cursor:"pointer", border:"none", marginBottom:3, transition:"all 0.15s", background:"transparent", overflow:"hidden" }}>
+                <div style={{
+                  width:3, alignSelf:"stretch", borderRadius:2, flexShrink:0, marginRight:10,
+                  background: screen===n.id ? T.accent : "transparent",
+                  transition:"background 0.15s"
+                }} />
+                <div style={{
+                  flex:1, display:"flex", alignItems:"center", justifyContent:"space-between",
+                  padding:"9px 10px", borderRadius:7,
                   background: screen===n.id ? T.accentDim : n.badge ? T.amberDim : "transparent",
                   color: screen===n.id ? T.accent : n.badge ? T.amber : T.textSub,
-                  boxShadow: screen===n.id ? `0 0 0 1px ${T.accent}22` : "none" }}>
-                <span style={{fontSize:16}}>{n.icon}</span>
-                <span style={{flex:1,textAlign:"left"}}>{n.label}</span>
-                {n.badge && (
-                  <span style={{ background:T.amber, color:"#000", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 7px", minWidth:18, textAlign:"center" }}>
-                    {n.badge}
-                  </span>
-                )}
+                  fontWeight: screen===n.id ? 700 : 500,
+                }}>
+                  <span>{n.label}</span>
+                  {n.badge && (
+                    <span style={{ background:T.amber, color:"#fff", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 7px", minWidth:18, textAlign:"center" }}>
+                      {n.badge}
+                    </span>
+                  )}
+                </div>
               </button>
             ))}
           </nav>
@@ -5292,7 +5313,7 @@ function AppInner() {
             </div>
             <button onClick={onLogout}
               style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.red}44`, background:T.redDim, color:T.red, transition:"all 0.15s" }}>
-              <span>⏻</span> Sign Out
+              Sign Out
             </button>
           </div>
         </div>
