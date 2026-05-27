@@ -645,7 +645,73 @@ const aiLedger = desc => {
   return "Suspense Account";
 };
 
-// ── XML string escaper ────────────────────────────────────────────
+// ── Custom Keyword Rule Engine ────────────────────────────────────
+// Each rule: { id, keyword, matchType:"contains"|"startsWith"|"endsWith"|"regex",
+//              ledger, voucherType:"Payment"|"Receipt"|"Contra"|"Journal"|"", enabled, priority }
+const DEFAULT_RULES = [
+  { id:"r01", keyword:"zomato|swiggy|dominos|dunzo|blinkit",      matchType:"regex",    ledger:"Office Expenses",              voucherType:"Payment",  enabled:true,  priority:1  },
+  { id:"r02", keyword:"uber|ola|rapido|irctc|railway|flight",     matchType:"regex",    ledger:"Travel Expenses",              voucherType:"Payment",  enabled:true,  priority:2  },
+  { id:"r03", keyword:"atm",                                       matchType:"contains", ledger:"Cash Account",                 voucherType:"Contra",   enabled:true,  priority:3  },
+  { id:"r04", keyword:"sweep|auto sweep|fdr|term deposit",         matchType:"regex",    ledger:"Fixed Deposit Account",        voucherType:"Contra",   enabled:true,  priority:4  },
+  { id:"r05", keyword:"salary|sal/|payroll|wages|empl",           matchType:"regex",    ledger:"Salary & Wages",               voucherType:"Payment",  enabled:true,  priority:5  },
+  { id:"r06", keyword:"rent|lease|premise",                        matchType:"regex",    ledger:"Rent Expenses",                voucherType:"Payment",  enabled:true,  priority:6  },
+  { id:"r07", keyword:"amazon|flipkart|meesho|myntra",             matchType:"regex",    ledger:"Office Expenses",              voucherType:"Payment",  enabled:true,  priority:7  },
+  { id:"r08", keyword:"google|meta|facebook|instagram|ads",        matchType:"regex",    ledger:"Advertisement Expenses",       voucherType:"Payment",  enabled:true,  priority:8  },
+  { id:"r09", keyword:"tds",                                       matchType:"contains", ledger:"TDS Payable",                  voucherType:"Journal",  enabled:true,  priority:9  },
+  { id:"r10", keyword:"gst|igst|cgst|sgst",                       matchType:"regex",    ledger:"GST Payable",                  voucherType:"Journal",  enabled:true,  priority:10 },
+  { id:"r11", keyword:"airtel|jio|bsnl|broadband|internet",       matchType:"regex",    ledger:"Telephone Expenses",           voucherType:"Payment",  enabled:true,  priority:11 },
+  { id:"r12", keyword:"electricity|bescom|msedcl|tpddl|power",    matchType:"regex",    ledger:"Electricity Charges",          voucherType:"Payment",  enabled:true,  priority:12 },
+  { id:"r13", keyword:"interest rcv|int cr|interest received",     matchType:"regex",    ledger:"Interest Received",            voucherType:"Receipt",  enabled:true,  priority:13 },
+  { id:"r14", keyword:"bank charge|service charge|annual fee|sms alert", matchType:"regex", ledger:"Bank Charges",            voucherType:"Payment",  enabled:true,  priority:14 },
+  { id:"r15", keyword:"neft|rtgs|imps transfer to",               matchType:"regex",    ledger:"Sundry Creditors",             voucherType:"Payment",  enabled:true,  priority:15 },
+  { id:"r16", keyword:"sales|invoice|received from customer",      matchType:"regex",    ledger:"Sales Account",               voucherType:"Receipt",  enabled:true,  priority:16 },
+  { id:"r17", keyword:"audit fee|ca fee|chartered accountant",     matchType:"regex",    ledger:"Audit Fees",                   voucherType:"Payment",  enabled:true,  priority:17 },
+  { id:"r18", keyword:"petrol|fuel|hp pump|bp pump|iocl",         matchType:"regex",    ledger:"Travel Expenses",              voucherType:"Payment",  enabled:true,  priority:18 },
+  { id:"r19", keyword:"drawing|personal withdrawal",               matchType:"regex",    ledger:"Drawings Account",             voucherType:"Journal",  enabled:true,  priority:19 },
+  { id:"r20", keyword:"transfer to self|own account|hdfc to icici", matchType:"regex",  ledger:"HDFC Bank",                    voucherType:"Contra",   enabled:true,  priority:20 },
+];
+
+// Persist rules in localStorage across sessions
+const loadRules = () => {
+  try { const s = localStorage.getItem("b2t_rules"); return s ? JSON.parse(s) : DEFAULT_RULES; } catch { return DEFAULT_RULES; }
+};
+const saveRules = rules => { try { localStorage.setItem("b2t_rules", JSON.stringify(rules)); } catch {} };
+const genRuleId = () => "r" + Math.random().toString(36).slice(2,8);
+
+// Core matcher — tests a single rule against a narration string
+const matchRule = (rule, narration) => {
+  if (!rule.enabled) return false;
+  const hay = (narration || "").toLowerCase();
+  const needle = rule.keyword.toLowerCase();
+  try {
+    switch (rule.matchType) {
+      case "regex":      return new RegExp(needle, "i").test(hay);
+      case "startsWith": return hay.startsWith(needle);
+      case "endsWith":   return hay.endsWith(needle);
+      case "contains":
+      default:           return hay.includes(needle);
+    }
+  } catch { return false; } // invalid regex — skip
+};
+
+// Apply all active rules (priority order) to a set of rows
+// Returns new rows array with ledger/voucherType overwritten where a rule fires
+const applyRulesToRows = (rows, rules) => {
+  const sorted = [...rules].filter(r=>r.enabled).sort((a,b)=>a.priority-b.priority);
+  return rows.map(row => {
+    for (const rule of sorted) {
+      if (matchRule(rule, row.narration)) {
+        return {
+          ...row,
+          ledger:      rule.ledger      || row.ledger,
+          voucherType: rule.voucherType || row.voucherType,
+          ruleMatched: rule.keyword,
+        };
+      }
+    }
+    return row;
+  });
+};
 const escXml = s => String(s||"")
   .replace(/&/g,"&amp;")
   .replace(/</g,"&lt;")
@@ -3361,11 +3427,48 @@ function ColumnMapScreen({ headers, templateKey, onMapped, onBack }) {
 // ══════════════════════════════════════════════════════════════════
 function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, user, tally }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all"); // all | suspense | duplicate | ready
+  const [filter, setFilter] = useState("all");
   const [forceImport, setForceImport] = useState({});
   const [bulkLedger, setBulkLedger] = useState("");
   const [selectedRows, setSelectedRows] = useState(new Set());
   const [showAudit, setShowAudit] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const [rules, setRules] = useState(loadRules);
+  const [editRule, setEditRule] = useState(null); // rule being edited in modal
+  const [newRule, setNewRule] = useState({ keyword:"", matchType:"contains", ledger:"", voucherType:"Payment", enabled:true });
+  const [ruleTestNarr, setRuleTestNarr] = useState("");
+
+  // Persist rules whenever they change
+  useEffect(() => { saveRules(rules); }, [rules]);
+
+  const reApplyRules = () => {
+    setRows(prev => {
+      const reset = prev.map(r => ({ ...r, ledger: r.aiLedger || r.ledger, ruleMatched: undefined }));
+      return applyRulesToRows(reset, rules);
+    });
+    toast(`Rules re-applied to ${rows.length} rows`, "success");
+  };
+
+  const addRule = () => {
+    if (!newRule.keyword || !newRule.ledger) return;
+    const r = { ...newRule, id: genRuleId(), priority: rules.length + 1 };
+    const updated = [...rules, r];
+    setRules(updated);
+    setNewRule({ keyword:"", matchType:"contains", ledger:"", voucherType:"Payment", enabled:true });
+    toast(`Rule added — click Re-Apply to update rows`, "success");
+  };
+
+  const deleteRule = id => setRules(prev => prev.filter(r=>r.id!==id).map((r,i)=>({...r,priority:i+1})));
+  const toggleRule = id => setRules(prev => prev.map(r=>r.id===id?{...r,enabled:!r.enabled}:r));
+  const moveRule = (id, dir) => setRules(prev => {
+    const idx = prev.findIndex(r=>r.id===id);
+    if ((dir===-1&&idx===0)||(dir===1&&idx===prev.length-1)) return prev;
+    const arr = [...prev];
+    [arr[idx],arr[idx+dir]] = [arr[idx+dir],arr[idx]];
+    return arr.map((r,i)=>({...r,priority:i+1}));
+  });
+
+  const ruleMatchCount = (rule) => rows.filter(r => matchRule(rule, r.narration)).length;
 
   const dupRows = rows.filter(r=>r.isDuplicate);
   const suspenseRows = rows.filter(r=>r.ledger==="Suspense Account"&&!r.isDuplicate);
@@ -3432,7 +3535,8 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
           <Pill color="green" dot>{readyCount} ready</Pill>
           {suspenseRows.length>0 && <Pill color="amber" dot>{suspenseRows.length} suspense</Pill>}
           {dupRows.length>0 && <Pill color="red" dot>{dupRows.length} duplicates</Pill>}
-          <Btn size="sm" variant="ghost" onClick={()=>setShowAudit(true)} icon="📋">Audit log ({auditLog.length})</Btn>
+          <Btn size="sm" variant="ghost" onClick={()=>setShowAudit(true)}>Audit log ({auditLog.length})</Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>setShowRules(true)}>Mapping Rules ({rules.filter(r=>r.enabled).length} active)</Btn>
         </div>
       </div>
 
@@ -3504,7 +3608,14 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
                     <Pill color={vtype==="Receipt"?"green":vtype==="Payment"?"red":vtype==="Contra"?"blue":"purple"} size="xs">{vtype}</Pill>
                   </td>
                   <td style={{ padding:"8px 12px" }}>
-                    <Pill color={r.aiLedger==="Suspense Account"?"amber":"blue"} size="xs">{(r.aiLedger||"").slice(0,18)}</Pill>
+                    <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                      <Pill color={r.aiLedger==="Suspense Account"?"amber":"blue"} size="xs">{(r.aiLedger||"").slice(0,18)}</Pill>
+                      {r.ruleMatched && (
+                        <span title={`Matched rule: "${r.ruleMatched}"`} style={{ fontSize:9, fontWeight:700, background:T.greenDim, color:T.green, border:`1px solid ${T.green}44`, borderRadius:4, padding:"1px 4px", whiteSpace:"nowrap" }}>
+                          Rule
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding:"8px 12px", minWidth:200 }}>
                     {isDup ? (
@@ -3527,6 +3638,130 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
         </table>
       </div>
       <p style={{ fontSize:11, color:T.textDim, marginTop:8 }}>Showing {filtered.length} of {rows.length} rows · {skipCount} duplicates will be skipped</p>
+
+      {/* ── Rules Manager Modal ── */}
+      <Modal open={showRules} onClose={()=>setShowRules(false)} title="Keyword Mapping Rules" width={780}>
+        <div style={{ fontSize:12, color:T.textSub, marginBottom:14, lineHeight:1.6 }}>
+          Rules run in priority order on every narration during ingestion. Higher-priority rules win. Click <strong>Re-Apply All Rules</strong> to update already-imported rows instantly.
+        </div>
+
+        {/* Re-apply + Reset buttons */}
+        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+          <Btn variant="primary" onClick={()=>{ reApplyRules(); setShowRules(false); }}>Re-Apply All Rules to Rows</Btn>
+          <Btn variant="secondary" onClick={()=>{ setRules(DEFAULT_RULES); saveRules(DEFAULT_RULES); toast("Rules reset to defaults","success"); }}>Reset to Defaults</Btn>
+        </div>
+
+        {/* Live test input */}
+        <div style={{ background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:9, padding:"10px 14px", marginBottom:16, display:"flex", gap:10, alignItems:"center" }}>
+          <div style={{ fontSize:12, fontWeight:600, color:T.accent, whiteSpace:"nowrap" }}>Test narration:</div>
+          <input value={ruleTestNarr} onChange={e=>setRuleTestNarr(e.target.value)}
+            placeholder="e.g. Zomato order 8923…" style={{ flex:1, padding:"6px 10px", borderRadius:7 }} />
+          {ruleTestNarr && (() => {
+            const hit = [...rules].filter(r=>r.enabled).sort((a,b)=>a.priority-b.priority).find(r=>matchRule(r,ruleTestNarr));
+            return hit
+              ? <div style={{ fontSize:11, fontWeight:700, color:T.green, whiteSpace:"nowrap" }}>→ {hit.ledger} · {hit.voucherType} <span style={{ fontWeight:400, color:T.textSub }}>(rule: "{hit.keyword}")</span></div>
+              : <div style={{ fontSize:11, color:T.amber, fontWeight:600, whiteSpace:"nowrap" }}>No rule matched → Suspense Account</div>;
+          })()}
+        </div>
+
+        {/* Add new rule form */}
+        <Card style={{ marginBottom:14, padding:"12px 14px", border:`1px dashed ${T.border}` }}>
+          <div style={{ fontSize:12, fontWeight:700, color:T.text, marginBottom:10 }}>+ Add New Rule</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"flex-end" }}>
+            <div style={{ flex:2, minWidth:160 }}>
+              <div style={{ fontSize:10, color:T.textSub, marginBottom:3, fontWeight:600 }}>KEYWORD / REGEX</div>
+              <input value={newRule.keyword} onChange={e=>setNewRule(p=>({...p,keyword:e.target.value}))}
+                placeholder="e.g. zomato|swiggy or ATM" style={{ width:"100%", padding:"6px 10px", borderRadius:7 }} />
+            </div>
+            <div style={{ minWidth:130 }}>
+              <div style={{ fontSize:10, color:T.textSub, marginBottom:3, fontWeight:600 }}>MATCH TYPE</div>
+              <select value={newRule.matchType} onChange={e=>setNewRule(p=>({...p,matchType:e.target.value}))} style={{ width:"100%", padding:"6px 8px", borderRadius:7 }}>
+                <option value="contains">Contains</option>
+                <option value="startsWith">Starts with</option>
+                <option value="endsWith">Ends with</option>
+                <option value="regex">Regex (|, *, ?)</option>
+              </select>
+            </div>
+            <div style={{ flex:2, minWidth:160 }}>
+              <div style={{ fontSize:10, color:T.textSub, marginBottom:3, fontWeight:600 }}>MAP TO LEDGER</div>
+              <select value={newRule.ledger} onChange={e=>setNewRule(p=>({...p,ledger:e.target.value}))} style={{ width:"100%", padding:"6px 8px", borderRadius:7 }}>
+                <option value="">Select ledger…</option>
+                {TALLY_LEDGERS.map(g=><optgroup key={g.group} label={g.group}>{g.items.map(l=><option key={l}>{l}</option>)}</optgroup>)}
+              </select>
+            </div>
+            <div style={{ minWidth:120 }}>
+              <div style={{ fontSize:10, color:T.textSub, marginBottom:3, fontWeight:600 }}>VOUCHER TYPE</div>
+              <select value={newRule.voucherType} onChange={e=>setNewRule(p=>({...p,voucherType:e.target.value}))} style={{ width:"100%", padding:"6px 8px", borderRadius:7 }}>
+                {["Payment","Receipt","Contra","Journal",""].map(v=><option key={v} value={v}>{v||"(auto)"}</option>)}
+              </select>
+            </div>
+            <Btn variant="primary" onClick={addRule} disabled={!newRule.keyword||!newRule.ledger}>Add Rule</Btn>
+          </div>
+        </Card>
+
+        {/* Rules list */}
+        <div style={{ maxHeight:320, overflowY:"auto" }}>
+          {rules.map((rule, idx) => {
+            const hits = ruleMatchCount(rule);
+            return (
+              <div key={rule.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:9, marginBottom:4,
+                background: rule.enabled ? (hits>0?T.greenDim+"66":T.surface) : T.border+"33",
+                border:`1px solid ${rule.enabled?(hits>0?T.green+"44":T.border):T.border+"66"}`,
+                opacity: rule.enabled?1:0.55, transition:"all 0.15s" }}>
+
+                {/* Priority drag handles */}
+                <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                  <button onClick={()=>moveRule(rule.id,-1)} disabled={idx===0}
+                    style={{ border:"none", background:"transparent", cursor:idx===0?"not-allowed":"pointer", color:T.textSub, fontSize:11, padding:"0 2px", lineHeight:1 }}>▲</button>
+                  <button onClick={()=>moveRule(rule.id,1)} disabled={idx===rules.length-1}
+                    style={{ border:"none", background:"transparent", cursor:idx===rules.length-1?"not-allowed":"pointer", color:T.textSub, fontSize:11, padding:"0 2px", lineHeight:1 }}>▼</button>
+                </div>
+
+                {/* Priority number */}
+                <div style={{ width:22, height:22, borderRadius:6, background:T.accentDim, color:T.accent, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{idx+1}</div>
+
+                {/* Keyword */}
+                <div style={{ flex:2, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:T.text, fontFamily:T.mono, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{rule.keyword}</div>
+                  <div style={{ fontSize:10, color:T.textSub }}>{rule.matchType}</div>
+                </div>
+
+                {/* Arrow */}
+                <div style={{ color:T.textDim, fontSize:14, fontWeight:700 }}>→</div>
+
+                {/* Ledger + voucher */}
+                <div style={{ flex:2, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{rule.ledger}</div>
+                  <Pill size="xs" color={rule.voucherType==="Payment"?"red":rule.voucherType==="Receipt"?"green":rule.voucherType==="Contra"?"blue":"purple"}>{rule.voucherType||"auto"}</Pill>
+                </div>
+
+                {/* Hit count badge */}
+                <div style={{ minWidth:52, textAlign:"right" }}>
+                  {hits > 0
+                    ? <span style={{ fontSize:11, fontWeight:700, background:T.greenDim, color:T.green, borderRadius:99, padding:"2px 8px" }}>{hits} rows</span>
+                    : <span style={{ fontSize:10, color:T.textDim }}>0 rows</span>}
+                </div>
+
+                {/* Toggle enable */}
+                <button onClick={()=>toggleRule(rule.id)} title={rule.enabled?"Disable rule":"Enable rule"}
+                  style={{ padding:"3px 10px", borderRadius:6, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:"none",
+                    background: rule.enabled?T.greenDim:T.border+"44", color:rule.enabled?T.green:T.textSub }}>
+                  {rule.enabled?"On":"Off"}
+                </button>
+
+                {/* Delete */}
+                <button onClick={()=>deleteRule(rule.id)} title="Delete rule"
+                  style={{ padding:"3px 8px", borderRadius:6, fontSize:11, fontWeight:700, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.red}33`, background:T.redDim, color:T.red }}>
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ fontSize:11, color:T.textSub, marginTop:10 }}>
+          {rules.filter(r=>r.enabled).length} active rules · {rules.filter(r=>r.enabled).reduce((s,r)=>s+ruleMatchCount(r),0)} total row matches
+        </div>
+      </Modal>
 
       {/* Audit Modal */}
       <Modal open={showAudit} onClose={()=>setShowAudit(false)} title="Audit Trail" width={640}>
@@ -5363,12 +5598,15 @@ function AppInner() {
         aiLedger: ai, ledger: ai, isDuplicate: false,
       };
     }).filter(r => r.date || r.debit || r.credit);
-    setRows(checkRunningBalance(detectDuplicates(built)));
+    const withDups = detectDuplicates(built);
+    const rules = loadRules();
+    setRows(checkRunningBalance(applyRulesToRows(withDups, rules)));
     setScreen(SCREENS.LEDGER);
-    const dups = built.filter(r=>r.isDuplicate).length;
+    const dups = withDups.filter(r=>r.isDuplicate).length;
+    const ruleHits = applyRulesToRows(withDups, rules).filter(r=>r.ruleMatched).length;
     const mismatches = built.filter(r=>r.balanceMismatch).length;
     toast(
-      `${built.length} transactions processed${dups>0?` · ${dups} duplicates flagged`:""}${mismatches>0?` · ${mismatches} balance mismatches`:""}`,
+      `${built.length} transactions · ${ruleHits} auto-mapped by rules${dups>0?` · ${dups} duplicates`:""}${mismatches>0?` · ${mismatches} balance issues`:""}`,
       dups>0||mismatches>0?"warn":"success"
     );
   };
