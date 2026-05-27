@@ -157,30 +157,43 @@ const sb = {
 
 // ── Design Tokens ────────────────────────────────────────────────
 const T = {
-  bg:          "#080b12",
-  surface:     "#0e1220",
-  card:        "#131825",
-  border:      "#1e2640",
-  borderLight: "#263050",
-  accent:      "#3d7fff",
-  accentDim:   "#0d1f4a",
-  accentGlow:  "rgba(61,127,255,0.18)",
-  accentSoft:  "rgba(61,127,255,0.08)",
-  green:       "#10d98c",
-  greenDim:    "#052e1e",
-  amber:       "#ffb547",
-  amberDim:    "#3d2200",
+  // Backgrounds — slightly warmer, more depth
+  bg:          "#070a10",
+  surface:     "#0c1018",
+  card:        "#111620",
+  cardHover:   "#161c2a",
+  // Borders — more visible
+  border:      "#1f2a42",
+  borderLight: "#2a3754",
+  borderMid:   "#243050",
+  // Accent blue — slightly brighter
+  accent:      "#4080ff",
+  accentDim:   "#0e2050",
+  accentGlow:  "rgba(64,128,255,0.20)",
+  accentSoft:  "rgba(64,128,255,0.09)",
+  // Semantic colours
+  green:       "#12e09a",
+  greenDim:    "#06321f",
+  greenMid:    "#0a4a2c",
+  amber:       "#ffc04a",
+  amberDim:    "#3d2800",
   red:         "#ff4f6a",
   redDim:      "#3d0a14",
   purple:      "#b47cff",
-  purpleDim:   "#1e0a40",
+  purpleDim:   "#200a44",
   gold:        "#ffd166",
   goldDim:     "#3d2800",
-  text:        "#eef2ff",
-  textMid:     "#8896b3",
-  textDim:     "#3d4f6e",
-  font:        "'DM Sans', 'Segoe UI', sans-serif",
-  mono:        "'JetBrains Mono', 'Fira Code', monospace",
+  teal:        "#22d3ee",
+  tealDim:     "#042a33",
+  // Text — full contrast hierarchy
+  text:        "#f0f4ff",     // headings, primary content
+  textHigh:    "#ffffff",     // maximum contrast labels
+  textMid:     "#8faac8",     // secondary text — clearly readable
+  textSub:     "#5d7a99",     // tertiary — subtle but visible
+  textDim:     "#2e4060",     // decorative only — NOT for readable text
+  // Brand
+  font:        "'DM Sans', 'Inter', 'Segoe UI', sans-serif",
+  mono:        "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
 };
 
 // ── Motivational Quotes ──────────────────────────────────────────
@@ -5200,25 +5213,26 @@ function AppInner() {
       <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:T.font }}>
         {/* Sidebar */}
         <div style={{ width:220, background:T.surface, borderRight:`1px solid ${T.border}`, padding:"20px 0", display:"flex", flexDirection:"column", flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100 }}>
-          <div style={{ padding:"0 20px 20px", borderBottom:`1px solid ${T.border}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-              <div style={{ width:38, height:38, borderRadius:11, background:"linear-gradient(145deg,#1a4fd6,#3d7fff,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, boxShadow:"0 0 24px rgba(61,127,255,0.3)" }}>🏦</div>
+          <div style={{ padding:"18px 16px 16px", borderBottom:`1px solid ${T.border}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:12 }}>
+              <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(145deg,#1a4fd6,#4080ff,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:21, flexShrink:0, boxShadow:"0 4px 20px rgba(64,128,255,0.35)" }}>🏦</div>
               <div>
-                <div style={{ fontWeight:900, fontSize:15, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#eef2ff,#3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</div>
-                <div style={{ fontSize:9, color:T.textDim, letterSpacing:"0.08em", textTransform:"uppercase", fontWeight:600 }}>by Verma Consultancy</div>
+                <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#ffffff 30%,#7eb3ff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>Bank2Tally</div>
+                {/* High-contrast brand subtitle — was invisible with textDim */}
+                <div style={{ fontSize:9.5, color:"#6a8fb5", letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:700, marginTop:1 }}>By Verma Consultancy</div>
               </div>
             </div>
-            <div style={{ background:"rgba(61,127,255,0.06)", borderLeft:`2px solid ${T.accent}44`, borderRadius:"0 6px 6px 0", padding:"6px 10px" }}>
-              <p style={{ fontSize:10, color:T.textMid, lineHeight:1.5, fontStyle:"italic" }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
+            <div style={{ background:"rgba(64,128,255,0.07)", borderLeft:`2px solid rgba(64,128,255,0.4)`, borderRadius:"0 6px 6px 0", padding:"7px 10px" }}>
+              <p style={{ fontSize:10.5, color:"#7a9fc2", lineHeight:1.55, fontStyle:"italic", margin:0 }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
             </div>
           </div>
           <nav style={{ flex:1, padding:"14px 10px" }}>
             {NAV.map(n=>(
               <button key={n.id} onClick={()=>setScreen(n.id)}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, fontSize:13, fontWeight:screen===n.id?600:400, fontFamily:T.font, cursor:"pointer", border:n.badge?`1px solid ${T.amber}66`:"none", marginBottom:3, transition:"all 0.15s",
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, fontSize:13, fontWeight:screen===n.id?700:500, fontFamily:T.font, cursor:"pointer", border:n.badge?`1px solid ${T.amber}66`:"none", marginBottom:2, transition:"all 0.15s",
                   background: screen===n.id ? T.accentDim : n.badge ? T.amberDim : "transparent",
-                  color: screen===n.id ? T.accent : n.badge ? T.amber : T.textMid,
-                  boxShadow: screen===n.id ? `0 0 12px ${T.accentGlow}` : "none" }}>
+                  color: screen===n.id ? "#7eb3ff" : n.badge ? T.amber : "#8faac8",
+                  boxShadow: screen===n.id ? `0 0 14px ${T.accentGlow}` : "none" }}>
                 <span style={{fontSize:16}}>{n.icon}</span>
                 <span style={{flex:1,textAlign:"left"}}>{n.label}</span>
                 {n.badge && (
@@ -5230,11 +5244,13 @@ function AppInner() {
             ))}
           </nav>
           <div style={{ padding:"14px 14px", borderTop:`1px solid ${T.border}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-              <div style={{ width:32, height:32, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:"#fff" }}>{user.avatar}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, padding:"8px 10px", borderRadius:10, background:T.surface }}>
+              <div style={{ width:34, height:34, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:`0 2px 10px ${T.accentGlow}` }}>{user.avatar}</div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
-                <div style={{ fontSize:10, color:T.textDim }}>{fromDbRole(user.role)}</div>
+                <div style={{ fontSize:12, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
+                {/* Role and email both visible */}
+                <div style={{ fontSize:10, color:"#6a8fb5", fontWeight:600 }}>{fromDbRole(user.role)}</div>
+                {user.email && <div style={{ fontSize:9.5, color:"#4e6e8a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:130 }}>{user.email}</div>}
               </div>
             </div>
             <button onClick={onLogout}
