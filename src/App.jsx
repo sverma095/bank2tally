@@ -3889,7 +3889,6 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
   // ── Mobile OTP state ─────────────────────────────────────────
   const [otpSent, setOtpSent]         = useState(false);
   const [otpValue, setOtpValue]       = useState("");
-  const [otpExpected, setOtpExpected] = useState(""); // stored in state (mock OTP for demo)
   const [otpSending, setOtpSending]   = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpErr, setOtpErr]           = useState("");
@@ -3923,44 +3922,53 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
     setProfSaving(false);
   };
 
-  // ── Send OTP (uses Supabase edge function or mock 4-digit code) ──
+  // ── Send OTP via Fast2SMS Supabase Edge Function ──────────────
   const sendOtp = async () => {
     const mob = profForm.mobile.trim();
     if (!/^[6-9]\d{9}$/.test(mob)) return setOtpErr("Enter a valid 10-digit Indian mobile number.");
     setOtpSending(true); setOtpErr(""); setOtpValue("");
     try {
-      // Generate a 4-digit OTP stored in Supabase profiles as otp_code+otp_expiry
-      const code = String(Math.floor(1000 + Math.random() * 9000));
+      // Generate 6-digit OTP, store hash + expiry in DB (never expose in frontend)
+      const code = String(Math.floor(100000 + Math.random() * 900000));
       const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+      // Save to DB first (so verifyOtp can check server-side)
       await sb.update("profiles", { id: user.id }, {
         mobile: mob,
         otp_code: code,
         otp_expiry: expiry,
         mobile_verified: false,
       });
-      setOtpExpected(code); // keep in memory for verification
+      // Call Supabase Edge Function which calls Fast2SMS (API key stays on server)
+      const fnRes = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sb._token || SUPABASE_ANON}`,
+        },
+        body: JSON.stringify({ mobile: mob, otp: code }),
+      });
+      const fnData = await fnRes.json();
+      if (!fnRes.ok || fnData.error) {
+        throw new Error(fnData.error || "SMS gateway error. Please try again.");
+      }
       setOtpSent(true);
-      // In production: call an SMS gateway (Twilio/MSG91) here
-      // For now show the OTP in a toast (demo mode)
-      alert(`[Demo] Your OTP is: ${code}\n(In production this would be sent via SMS)`);
-    } catch(e) { setOtpErr("Failed to send OTP: "+e.message); }
+      setOtpErr("");
+    } catch(e) { setOtpErr("Failed to send OTP: " + e.message); }
     setOtpSending(false);
   };
 
-  // ── Verify OTP ────────────────────────────────────────────────
+  // ── Verify OTP (server-side check against DB) ─────────────────
   const verifyOtp = async () => {
-    if (otpValue.length !== 4) return setOtpErr("Enter the 4-digit OTP.");
+    if (otpValue.length !== 6) return setOtpErr("Enter the 6-digit OTP sent to your mobile.");
     setOtpVerifying(true); setOtpErr("");
     try {
-      // Fetch stored OTP from DB to verify server-side
       const rows = await sb.from("profiles", `id=eq.${user.id}&select=otp_code,otp_expiry`);
       const prof = rows?.[0];
       if (!prof) throw new Error("Profile not found.");
       if (!prof.otp_code) throw new Error("No OTP requested. Please send again.");
       if (new Date(prof.otp_expiry) < new Date()) throw new Error("OTP expired. Please resend.");
       if (prof.otp_code !== otpValue) throw new Error("Incorrect OTP. Please try again.");
-
-      // OTP correct — mark verified, clear OTP
+      // OTP correct — mark verified, clear from DB
       await sb.update("profiles", { id: user.id }, {
         mobile: profForm.mobile.trim(),
         mobile_verified: true,
@@ -3968,10 +3976,10 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
         otp_expiry: null,
       });
       setMobileVerified(true);
-      setOtpSent(false); setOtpValue(""); setOtpExpected("");
+      setOtpSent(false); setOtpValue("");
       if (onUserUpdate) onUserUpdate({ ...user, mobile: profForm.mobile.trim(), mobile_verified: true });
-      setProfOk("Mobile number verified!");
-      setTimeout(()=>setProfOk(""),3000);
+      setProfOk("Mobile number verified successfully!");
+      setTimeout(()=>setProfOk(""), 3000);
     } catch(e) { setOtpErr(e.message); }
     setOtpVerifying(false);
   };
@@ -4094,11 +4102,11 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
             {/* OTP input */}
             {otpSent && !mobileVerified && (
               <div style={{ marginTop:10, padding:"14px 16px", background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:10 }}>
-                <p style={{ fontSize:12, color:T.textMid, marginBottom:10 }}>Enter the 4-digit OTP sent to +91 {profForm.mobile}</p>
+                <p style={{ fontSize:12, color:T.textMid, marginBottom:10 }}>Enter the 6-digit OTP sent to +91 {profForm.mobile}</p>
                 {otpErr && <p style={{ fontSize:11, color:T.red, marginBottom:8 }}>✕ {otpErr}</p>}
-                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                  {/* 4 individual OTP boxes */}
-                  {[0,1,2,3].map(i => (
+                <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+                  {/* 6 individual OTP boxes */}
+                  {[0,1,2,3,4,5].map(i => (
                     <input
                       key={i}
                       id={`otp-${i}`}
@@ -4108,27 +4116,27 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
                         const v = e.target.value.replace(/\D/,"");
                         const arr = otpValue.split("");
                         arr[i] = v;
-                        const next = arr.join("").slice(0,4);
+                        const next = arr.join("").slice(0,6);
                         setOtpValue(next);
                         setOtpErr("");
-                        if (v && i < 3) document.getElementById(`otp-${i+1}`)?.focus();
+                        if (v && i < 5) document.getElementById(`otp-${i+1}`)?.focus();
                       }}
                       onKeyDown={e => {
                         if (e.key==="Backspace" && !otpValue[i] && i>0) document.getElementById(`otp-${i-1}`)?.focus();
                       }}
-                      style={{ width:44, height:48, textAlign:"center", fontSize:20, fontWeight:700, borderRadius:10, border:`2px solid ${otpValue[i]?T.accent:T.border}`, background:T.surface, color:T.text, outline:"none", fontFamily:T.font }}
+                      style={{ width:38, height:44, textAlign:"center", fontSize:18, fontWeight:700, borderRadius:9, border:`2px solid ${otpValue[i]?T.accent:T.border}`, background:T.surface, color:T.text, outline:"none", fontFamily:T.font }}
                     />
                   ))}
                   <Btn
                     variant="primary"
                     onClick={verifyOtp}
-                    disabled={otpVerifying || otpValue.length < 4}
+                    disabled={otpVerifying || otpValue.length < 6}
                     icon={otpVerifying?"⏳":"✓"}
                   >
                     {otpVerifying ? "Verifying…" : "Verify"}
                   </Btn>
                 </div>
-                <p style={{ fontSize:11, color:T.textDim, marginTop:8 }}>OTP valid for 10 minutes</p>
+                <p style={{ fontSize:11, color:T.textDim, marginTop:8 }}>OTP valid for 10 minutes · Sent via SMS to your mobile</p>
               </div>
             )}
           </div>
