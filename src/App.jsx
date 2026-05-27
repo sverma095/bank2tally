@@ -157,40 +157,40 @@ const sb = {
 
 // ── Design Tokens ────────────────────────────────────────────────
 const T = {
-  // Backgrounds — slightly warmer, more depth
-  bg:          "#070a10",
-  surface:     "#0c1018",
-  card:        "#111620",
-  cardHover:   "#161c2a",
-  // Borders — more visible
-  border:      "#1f2a42",
-  borderLight: "#2a3754",
-  borderMid:   "#243050",
-  // Accent blue — slightly brighter
-  accent:      "#4080ff",
-  accentDim:   "#0e2050",
-  accentGlow:  "rgba(64,128,255,0.20)",
-  accentSoft:  "rgba(64,128,255,0.09)",
-  // Semantic colours
-  green:       "#12e09a",
-  greenDim:    "#06321f",
-  greenMid:    "#0a4a2c",
-  amber:       "#ffc04a",
-  amberDim:    "#3d2800",
-  red:         "#ff4f6a",
-  redDim:      "#3d0a14",
-  purple:      "#b47cff",
-  purpleDim:   "#200a44",
-  gold:        "#ffd166",
-  goldDim:     "#3d2800",
-  teal:        "#22d3ee",
-  tealDim:     "#042a33",
-  // Text — full contrast hierarchy
-  text:        "#f0f4ff",     // headings, primary content
-  textHigh:    "#ffffff",     // maximum contrast labels
-  textMid:     "#8faac8",     // secondary text — clearly readable
-  textSub:     "#5d7a99",     // tertiary — subtle but visible
-  textDim:     "#2e4060",     // decorative only — NOT for readable text
+  // Backgrounds — clean premium light
+  bg:          "#f0f4f9",
+  surface:     "#ffffff",
+  card:        "#ffffff",
+  cardHover:   "#f8fafd",
+  // Borders — soft, visible
+  border:      "#dde3ee",
+  borderLight: "#e8edf6",
+  borderMid:   "#c8d3e8",
+  // Accent blue — rich, professional
+  accent:      "#2563eb",
+  accentDim:   "#dbeafe",
+  accentGlow:  "rgba(37,99,235,0.15)",
+  accentSoft:  "rgba(37,99,235,0.06)",
+  // Semantic colours — vivid on light
+  green:       "#059669",
+  greenDim:    "#d1fae5",
+  greenMid:    "#a7f3d0",
+  amber:       "#d97706",
+  amberDim:    "#fef3c7",
+  red:         "#dc2626",
+  redDim:      "#fee2e2",
+  purple:      "#7c3aed",
+  purpleDim:   "#ede9fe",
+  gold:        "#b45309",
+  goldDim:     "#fef3c7",
+  teal:        "#0891b2",
+  tealDim:     "#cffafe",
+  // Text — strong contrast on white/light
+  text:        "#0f172a",     // headings, primary content
+  textHigh:    "#000000",     // maximum contrast labels
+  textMid:     "#334155",     // secondary text — clearly readable
+  textSub:     "#64748b",     // tertiary — subtle but visible
+  textDim:     "#94a3b8",     // decorative only — NOT for readable text
   // Brand
   font:        "'DM Sans', 'Inter', 'Segoe UI', sans-serif",
   mono:        "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
@@ -2022,18 +2022,18 @@ const css = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: ${T.bg}; color: ${T.text}; font-family: ${T.font}; }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: ${T.surface}; }
-  ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 99px; }
-  select, input, textarea { background: ${T.card}; color: ${T.text}; border: 1px solid ${T.border}; border-radius: 8px; font-family: ${T.font}; font-size: 13px; }
+  ::-webkit-scrollbar-track { background: #e8edf6; }
+  ::-webkit-scrollbar-thumb { background: #c8d3e8; border-radius: 99px; }
+  select, input, textarea { background: ${T.surface}; color: ${T.text}; border: 1px solid ${T.border}; border-radius: 8px; font-family: ${T.font}; font-size: 13px; }
   select:focus, input:focus { outline: none; border-color: ${T.accent}; box-shadow: 0 0 0 3px ${T.accentGlow}; }
   @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
   @keyframes shimmer { from { background-position: -200% 0 } to { background-position: 200% 0 } }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
   @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
   .fade-in { animation: fadeIn 0.3s ease forwards; }
-  .row-hover:hover { background: ${T.borderLight} !important; }
-  .btn-hover:hover { filter: brightness(1.15); transform: translateY(-1px); }
-  .card-hover:hover { border-color: ${T.accent} !important; }
+  .row-hover:hover { background: #f0f4f9 !important; }
+  .btn-hover:hover { filter: brightness(0.95); transform: translateY(-1px); }
+  .card-hover:hover { border-color: ${T.accent} !important; box-shadow: 0 0 0 3px ${T.accentGlow}; }
 `;
 
 function Pill({ children, color = "gray", size = "sm", dot = false }) {
@@ -2075,7 +2075,7 @@ function Btn({ children, onClick, variant="primary", disabled, icon, size="md", 
 }
 
 function Card({ children, style:extra={}, className="" }) {
-  return <div className={className} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:14, padding:20, ...extra }}>{children}</div>;
+  return <div className={className} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:14, padding:20, boxShadow:"0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)", ...extra }}>{children}</div>;
 }
 
 function Input({ value, onChange, placeholder, prefix, suffix, style:extra={} }) {
@@ -2092,7 +2092,7 @@ function Input({ value, onChange, placeholder, prefix, suffix, style:extra={} })
 function Modal({ open, onClose, title, children, width=540 }) {
   if (!open) return null;
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }} onClick={onClose}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.45)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }} onClick={onClose}>
       <div className="fade-in" style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:18, width, maxWidth:"95vw", maxHeight:"85vh", overflow:"auto", padding:28 }} onClick={e=>e.stopPropagation()}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <span style={{ fontWeight:700, fontSize:16, color:T.text }}>{title}</span>
@@ -2459,8 +2459,8 @@ function LoginScreen({ onLogin }) {
         <div style={{ position:"absolute", inset:0, backgroundImage:`radial-gradient(ellipse at 30% 60%, ${T.accentDim}44 0%, transparent 55%)`, pointerEvents:"none" }} />
         <div className="fade-in" style={{ width:440, position:"relative" }}>
           <div style={{ textAlign:"center", marginBottom:24 }}>
-            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1a4fd6, #3d7fff, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, margin:"0 auto 14px", boxShadow:"0 0 60px rgba(61,127,255,0.25)" }}>🔑</div>
-            <h1 style={{ fontSize:24, fontWeight:900, letterSpacing:"-0.5px", marginBottom:4, background:"linear-gradient(135deg, #eef2ff 40%, #3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Set New Password</h1>
+            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1d4ed8, #2563eb, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, margin:"0 auto 14px", boxShadow:"0 0 40px rgba(37,99,235,0.20)" }}>🔑</div>
+            <h1 style={{ fontSize:24, fontWeight:900, letterSpacing:"-0.5px", marginBottom:4, background:"linear-gradient(135deg, #1d4ed8 40%, #7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Set New Password</h1>
             <p style={{ color:T.textMid, fontSize:13 }}>Choose a strong new password for your account.</p>
           </div>
           <Card style={{ padding:28 }}>
@@ -2538,9 +2538,9 @@ function LoginScreen({ onLogin }) {
         {/* ── Brand Header ── */}
         <div style={{ textAlign:"center", marginBottom:24 }}>
           <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
-            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1a4fd6, #3d7fff, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, boxShadow:"0 0 0 1px rgba(61,127,255,0.3), 0 0 60px rgba(61,127,255,0.25), 0 8px 32px rgba(0,0,0,0.5)" }}>🏦</div>
+            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1d4ed8, #2563eb, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, boxShadow:"0 0 0 1px rgba(37,99,235,0.2), 0 0 40px rgba(37,99,235,0.15), 0 8px 24px rgba(0,0,0,0.12)" }}>🏦</div>
           </div>
-          <h1 style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px", marginBottom:3, background:"linear-gradient(135deg, #eef2ff 40%, #3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</h1>
+          <h1 style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px", marginBottom:3, background:"linear-gradient(135deg, #1d4ed8 40%, #7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</h1>
           <p style={{ color:T.textMid, fontSize:11, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>Professional Bank Statement Importer</p>
           <div style={{ background:`linear-gradient(135deg, rgba(61,127,255,0.08), rgba(180,124,255,0.08))`, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 14px", textAlign:"left" }}>
             <p style={{ fontSize:12, color:T.textMid, lineHeight:1.65, fontStyle:"italic", marginBottom:4 }}>"{todayQuote.text}"</p>
@@ -3667,9 +3667,48 @@ function PreviewScreen({ rows, filename, selectedCompanies, onBack, onImport, au
         </div>
       </Card>
 
-      <div style={{ display:"flex", justifyContent:"space-between", marginTop:20 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", marginTop:20, alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <Btn variant="secondary" onClick={onBack} icon="←">Back</Btn>
-        <Btn onClick={onImport} icon="🚀" size="lg">Push to Tally ({companies.length} {companies.length===1?"company":"companies"})</Btn>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          {/* Download XML — Manual import in Tally */}
+          <div>
+            {companies.length > 1 ? (
+              <div style={{ display:"flex", gap:6 }}>
+                {companies.map(c=>(
+                  <Btn key={c.id} onClick={()=>exportXML(c)} disabled={exporting==="xml"} icon="📥" variant="outline">
+                    {exporting==="xml"?"Exporting…":`Download XML – ${c.name.split(" ")[0]}`}
+                  </Btn>
+                ))}
+              </div>
+            ) : (
+              <Btn onClick={()=>exportXML(companies[0]||{id:"default",name:"Company"})} disabled={exporting==="xml"} icon="📥" variant="outline">
+                {exporting==="xml"?"Generating…":"Download XML (Manual Import)"}
+              </Btn>
+            )}
+          </div>
+          {/* Push to Tally — Automatic */}
+          <Btn onClick={onImport} icon="🚀" size="lg" style={{ background:`linear-gradient(135deg,${T.accent},${T.purple})`, color:"#fff", border:"none", boxShadow:`0 4px 16px ${T.accentGlow}`, fontWeight:700 }}>
+            Push to Tally ({companies.length} {companies.length===1?"company":"companies"})
+          </Btn>
+        </div>
+      </div>
+
+      {/* Export method explainer */}
+      <div style={{ marginTop:14, display:"flex", gap:10, flexWrap:"wrap" }}>
+        <div style={{ flex:1, minWidth:240, background:T.accentDim, border:`1px solid ${T.accent}33`, borderRadius:10, padding:"10px 14px", display:"flex", gap:10, alignItems:"flex-start" }}>
+          <span style={{ fontSize:18 }}>📥</span>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:T.accent, marginBottom:2 }}>Download XML — Manual Import</div>
+            <div style={{ fontSize:11, color:T.textMid, lineHeight:1.6 }}>Downloads a Tally-compatible XML file. Open Tally → Gateway of Tally → Import Data → Vouchers → select this file.</div>
+          </div>
+        </div>
+        <div style={{ flex:1, minWidth:240, background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:10, padding:"10px 14px", display:"flex", gap:10, alignItems:"flex-start" }}>
+          <span style={{ fontSize:18 }}>🚀</span>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:T.green, marginBottom:2 }}>Push to Tally — Automatic</div>
+            <div style={{ fontSize:11, color:T.textMid, lineHeight:1.6 }}>Sends vouchers directly to Tally via the Bank2Tally Connector extension. Requires Tally running with Gateway enabled on port {tally?.port||9000}.</div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -4859,13 +4898,13 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div style={{ minHeight:"100vh", background:"#080b12", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"sans-serif", color:"#eef2ff" }}>
+        <div style={{ minHeight:"100vh", background:"#f0f4f9", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"sans-serif", color:"#0f172a" }}>
           <div style={{ maxWidth:480, textAlign:"center", padding:32 }}>
             <div style={{ fontSize:48, marginBottom:16 }}>⚠</div>
-            <h2 style={{ fontSize:20, fontWeight:700, marginBottom:12, color:"#ff4f6a" }}>Something went wrong</h2>
-            <p style={{ color:"#8896b3", lineHeight:1.7, marginBottom:20 }}>{this.state.error?.message || "An unexpected error occurred."}</p>
+            <h2 style={{ fontSize:20, fontWeight:700, marginBottom:12, color:"#dc2626" }}>Something went wrong</h2>
+            <p style={{ color:"#64748b", lineHeight:1.7, marginBottom:20 }}>{this.state.error?.message || "An unexpected error occurred."}</p>
             <button onClick={() => { this.setState({ error:null }); window.location.reload(); }}
-              style={{ padding:"10px 24px", background:"#3d7fff", color:"#fff", border:"none", borderRadius:8, fontSize:14, fontWeight:600, cursor:"pointer" }}>
+              style={{ padding:"10px 24px", background:"#2563eb", color:"#fff", border:"none", borderRadius:8, fontSize:14, fontWeight:600, cursor:"pointer" }}>
               Reload App
             </button>
           </div>
@@ -5215,15 +5254,14 @@ function AppInner() {
         <div style={{ width:220, background:T.surface, borderRight:`1px solid ${T.border}`, padding:"20px 0", display:"flex", flexDirection:"column", flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100 }}>
           <div style={{ padding:"18px 16px 16px", borderBottom:`1px solid ${T.border}` }}>
             <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:12 }}>
-              <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(145deg,#1a4fd6,#4080ff,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:21, flexShrink:0, boxShadow:"0 4px 20px rgba(64,128,255,0.35)" }}>🏦</div>
+              <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(145deg,#1d4ed8,#2563eb,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:21, flexShrink:0, boxShadow:"0 4px 20px rgba(37,99,235,0.30)" }}>🏦</div>
               <div>
-                <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#ffffff 30%,#7eb3ff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>Bank2Tally</div>
-                {/* High-contrast brand subtitle — was invisible with textDim */}
-                <div style={{ fontSize:9.5, color:"#6a8fb5", letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:700, marginTop:1 }}>By Verma Consultancy</div>
+                <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#1d4ed8 30%,#7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>Bank2Tally</div>
+                <div style={{ fontSize:9.5, color:"#64748b", letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:700, marginTop:1 }}>By Verma Consultancy</div>
               </div>
             </div>
-            <div style={{ background:"rgba(64,128,255,0.07)", borderLeft:`2px solid rgba(64,128,255,0.4)`, borderRadius:"0 6px 6px 0", padding:"7px 10px" }}>
-              <p style={{ fontSize:10.5, color:"#7a9fc2", lineHeight:1.55, fontStyle:"italic", margin:0 }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
+            <div style={{ background:"rgba(37,99,235,0.06)", borderLeft:`2px solid rgba(37,99,235,0.4)`, borderRadius:"0 6px 6px 0", padding:"7px 10px" }}>
+              <p style={{ fontSize:10.5, color:"#64748b", lineHeight:1.55, fontStyle:"italic", margin:0 }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
             </div>
           </div>
           <nav style={{ flex:1, padding:"14px 10px" }}>
@@ -5231,8 +5269,8 @@ function AppInner() {
               <button key={n.id} onClick={()=>setScreen(n.id)}
                 style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:9, fontSize:13, fontWeight:screen===n.id?700:500, fontFamily:T.font, cursor:"pointer", border:n.badge?`1px solid ${T.amber}66`:"none", marginBottom:2, transition:"all 0.15s",
                   background: screen===n.id ? T.accentDim : n.badge ? T.amberDim : "transparent",
-                  color: screen===n.id ? "#7eb3ff" : n.badge ? T.amber : "#8faac8",
-                  boxShadow: screen===n.id ? `0 0 14px ${T.accentGlow}` : "none" }}>
+                  color: screen===n.id ? T.accent : n.badge ? T.amber : T.textSub,
+                  boxShadow: screen===n.id ? `0 0 0 1px ${T.accent}22` : "none" }}>
                 <span style={{fontSize:16}}>{n.icon}</span>
                 <span style={{flex:1,textAlign:"left"}}>{n.label}</span>
                 {n.badge && (
@@ -5248,9 +5286,8 @@ function AppInner() {
               <div style={{ width:34, height:34, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:`0 2px 10px ${T.accentGlow}` }}>{user.avatar}</div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
-                {/* Role and email both visible */}
-                <div style={{ fontSize:10, color:"#6a8fb5", fontWeight:600 }}>{fromDbRole(user.role)}</div>
-                {user.email && <div style={{ fontSize:9.5, color:"#4e6e8a", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:130 }}>{user.email}</div>}
+                <div style={{ fontSize:10, color:T.textSub, fontWeight:600 }}>{fromDbRole(user.role)}</div>
+                {user.email && <div style={{ fontSize:9.5, color:T.textDim, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:130 }}>{user.email}</div>}
               </div>
             </div>
             <button onClick={onLogout}
