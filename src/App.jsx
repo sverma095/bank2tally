@@ -2476,11 +2476,11 @@ function LoginScreen({ onLogin }) {
                 {err && <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:14 }}>{err}</div>}
                 <div style={{ marginBottom:16 }}>
                   <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>New Password</label>
-                  <Input value={newPass} onChange={e=>setNewPass(e.target.value)} placeholder="Min 8 chars + number/symbol" prefix="🔒" type="password" />
+                  <Input value={newPass} onChange={e=>setNewPass(e.target.value)} placeholder="Min 8 chars + number/symbol" prefix="" type="password" />
                 </div>
                 <div style={{ marginBottom:22 }}>
                   <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>Confirm New Password</label>
-                  <Input value={newPass2} onChange={e=>setNewPass2(e.target.value)} placeholder="Repeat new password" prefix="🔒" type="password" />
+                  <Input value={newPass2} onChange={e=>setNewPass2(e.target.value)} placeholder="Repeat new password" prefix="" type="password" />
                 </div>
                 <Btn onClick={handleSetNewPassword} disabled={loading} fullWidth size="lg" icon={loading?"⏳":"✔"}>
                   {loading ? "Saving…" : "Set New Password"}
@@ -2594,7 +2594,7 @@ function LoginScreen({ onLogin }) {
                     <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>Registered email address</label>
                     <Input value={forgotEmail} onChange={e=>setForgotEmail(e.target.value)} placeholder="you@company.in" prefix="✉" />
                   </div>
-                  <Btn onClick={handleForgotPassword} disabled={loading} fullWidth size="lg" icon={loading?"⏳":"📨"}>
+                  <Btn onClick={handleForgotPassword} disabled={loading} fullWidth size="lg" icon={loading?"⏳":"→"}>
                     {loading ? "Sending…" : "Send Reset Link"}
                   </Btn>
                   <div style={{ marginTop:14, textAlign:"center" }}>
@@ -2609,7 +2609,7 @@ function LoginScreen({ onLogin }) {
           ) : verifyStep ? (
             <>
               <div style={{ textAlign:"center", padding:"10px 0 20px" }}>
-                <div style={{ fontSize:52, marginBottom:12 }}>📬</div>
+                <div style={{ width:52, height:52, borderRadius:"50%", background:T.accentDim, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", border:`1px solid ${T.accent}33` }}><div style={{ fontSize:10, fontWeight:700, color:T.accent }}>EMAIL</div></div>
                 <h3 style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:8 }}>Check your email</h3>
                 <p style={{ fontSize:13, color:T.textMid, lineHeight:1.7, marginBottom:4 }}>
                   We sent a verification link to:
@@ -2624,7 +2624,7 @@ function LoginScreen({ onLogin }) {
                     3. Come back here and <strong style={{color:T.text}}>Sign In</strong>
                   </p>
                 </div>
-                <Btn onClick={handleResendVerification} variant="secondary" fullWidth icon="📨">
+                <Btn onClick={handleResendVerification} variant="secondary" fullWidth icon="→">
                   Resend verification email
                 </Btn>
                 <div style={{ marginTop:14 }}>
@@ -2643,7 +2643,7 @@ function LoginScreen({ onLogin }) {
               </div>
               <div style={{ marginBottom:22 }}>
                 <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:6 }}>Password</label>
-                <Input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" prefix="🔒" />
+                <Input value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" prefix="" />
               </div>
               <Btn onClick={handleLogin} disabled={loading} fullWidth size="lg" icon={loading?"⏳":"→"}>
                 {loading ? "Signing in…" : "Sign In"}
@@ -2673,7 +2673,7 @@ function LoginScreen({ onLogin }) {
                 </div>
               ))}
               <div style={{ marginTop:6 }}>
-                <Btn onClick={handleRegister} disabled={loading} fullWidth size="lg" icon={loading?"⏳":"📝"}>
+                <Btn onClick={handleRegister} disabled={loading} fullWidth size="lg" icon={loading?"⏳":"→"}>
                   {loading ? "Submitting…" : "Request Access"}
                 </Btn>
               </div>
@@ -2683,21 +2683,19 @@ function LoginScreen({ onLogin }) {
 
         {/* ── Verma Consultancy Branding Footer ── */}
         <div style={{ textAlign:"center", marginTop:22, paddingTop:16, borderTop:`1px solid ${T.border}` }}>
-          <div style={{ display:"inline-flex", alignItems:"center", gap:6, marginBottom:8 }}>
-            <span style={{ color:T.gold, fontSize:14 }}>✦</span>
-            <span style={{ fontSize:12, fontWeight:700, color:T.textMid, letterSpacing:"0.03em" }}>Produced by</span>
-            <span style={{ fontSize:12, fontWeight:800, color:T.text, letterSpacing:"0.02em" }}>Verma Consultancy Services</span>
-            <span style={{ color:T.gold, fontSize:14 }}>✦</span>
+          <div style={{ marginBottom:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:T.textSub, letterSpacing:"0.04em", textTransform:"uppercase" }}>Produced by</span>
+            <span style={{ fontSize:12, fontWeight:800, color:T.text, letterSpacing:"0.02em", marginLeft:6 }}>Verma Consultancy Services</span>
           </div>
           <p style={{ fontSize:11, color:T.textDim, marginBottom:8 }}>For purchase, support &amp; enquiries</p>
-          <div style={{ display:"flex", justifyContent:"center", gap:16, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", justifyContent:"center", gap:12, flexWrap:"wrap" }}>
             <a href="tel:+918707401846"
-              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px", background:T.accentSoft, border:`1px solid ${T.accent}44`, borderRadius:20, fontSize:11, fontWeight:600, color:T.accent, textDecoration:"none" }}>
-              📞 8707401846
+              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 14px", background:T.accentSoft, border:`1px solid ${T.accent}44`, borderRadius:20, fontSize:11, fontWeight:600, color:T.accent, textDecoration:"none" }}>
+              +91 8707401846
             </a>
             <a href="mailto:svtiger543939@gmail.com"
-              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px", background:T.accentSoft, border:`1px solid ${T.accent}44`, borderRadius:20, fontSize:11, fontWeight:600, color:T.accent, textDecoration:"none" }}>
-              ✉ svtiger543939@gmail.com
+              style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 14px", background:T.accentSoft, border:`1px solid ${T.accent}44`, borderRadius:20, fontSize:11, fontWeight:600, color:T.accent, textDecoration:"none" }}>
+              svtiger543939@gmail.com
             </a>
           </div>
           <p style={{ fontSize:10, color:T.textDim, marginTop:10, letterSpacing:"0.04em" }}>v2.0 Commercial · Tally ERP 9 &amp; Prime Compatible</p>
@@ -3378,7 +3376,7 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
 
       {/* Toolbar */}
       <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
-        <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search narration, ledger…" prefix="🔍" style={{ width:220 }} />
+        <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search narration, ledger…" prefix="" style={{ width:220 }} />
         <div style={{ display:"flex", gap:4 }}>
           {["all","suspense","duplicate","ready"].map(f => (
             <button key={f} onClick={()=>setFilter(f)}
@@ -3786,7 +3784,7 @@ function HistoryScreen({ history, onReimport, onDeleteEntry, onClearAll, onBack 
         <p style={{ fontSize:11, color:T.textMid }}>History is stored on this device only and <strong style={{color:T.text}}>auto-deleted after 7 days</strong> to save space. Download exports before they expire.</p>
       </div>
 
-      <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by file name or company…" prefix="🔍" style={{ marginBottom:16, width:"100%" }} />
+      <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by file name or company…" prefix="" style={{ marginBottom:16, width:"100%" }} />
 
       {filtered.length === 0 ? (
         <div style={{ textAlign:"center", padding:"60px 0", color:T.textDim }}>
@@ -4491,7 +4489,7 @@ function UserManagementScreen({ adminUser }) {
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
         <div>
-          <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#eef2ff 50%,#3d7fff)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>User Management</h2>
+          <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.5px", color:T.text }}>User Management</h2>
           <p style={{ color:T.textMid, fontSize:13, marginTop:3 }}>Admin-only panel · full user control</p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
@@ -4521,10 +4519,10 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
       )}
 
       {/* Tabs */}
-      <div style={{ display:"flex", background:T.surface, borderRadius:11, padding:4, marginBottom:20, border:`1px solid ${T.border}`, width:"fit-content", gap:2 }}>
-        {[["users","👥 Users"],["approvals","⏳ Approvals"]].map(([t,label]) => (
+      <div style={{ display:"flex", borderBottom:`2px solid ${T.border}`, marginBottom:20, gap:0 }}>
+        {[["users","Users"],["approvals","Approvals"]].map(([t,label]) => (
           <button key={t} onClick={()=>setTab(t)}
-            style={{ padding:"7px 18px", borderRadius:8, border:"none", cursor:"pointer", fontFamily:T.font, fontSize:13, fontWeight:tab===t?600:400, transition:"all 0.2s", background:tab===t?T.accent:"transparent", color:tab===t?"#fff":T.textMid, boxShadow:tab===t?`0 0 16px ${T.accentGlow}`:"none" }}>
+            style={{ padding:"10px 22px", border:"none", borderBottom: tab===t ? `2px solid ${T.accent}` : "2px solid transparent", marginBottom:"-2px", cursor:"pointer", fontFamily:T.font, fontSize:13, fontWeight:tab===t?700:500, transition:"all 0.15s", background:"transparent", color:tab===t?T.accent:T.textSub, letterSpacing:"-0.1px" }}>
             {label}
           </button>
         ))}
@@ -4536,15 +4534,14 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
       {/* Stats row */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
         {[
-          ["👥","Total Users",  users.length,                                        T.accent],
-          ["✅","Active",       users.filter(u=>u.status==="approved").length,        T.green],
-          ["⏳","Pending",      users.filter(u=>u.status==="pending").length,         T.amber],
-          ["🔒","On Hold",      users.filter(u=>u.status==="on_hold").length,         T.purple],
-        ].map(([icon,label,val,color]) => (
-          <Card key={label} style={{ padding:"14px 18px" }}>
-            <div style={{ fontSize:20, marginBottom:4 }}>{icon}</div>
-            <div style={{ fontSize:22, fontWeight:700, color }}>{val}</div>
-            <div style={{ fontSize:11, color:T.textDim }}>{label}</div>
+          ["Total Users",  users.length,                                        T.accent],
+          ["Active",       users.filter(u=>u.status==="approved").length,        T.green],
+          ["Pending",      users.filter(u=>u.status==="pending").length,         T.amber],
+          ["On Hold",      users.filter(u=>u.status==="on_hold").length,         T.purple],
+        ].map(([label,val,color]) => (
+          <Card key={label} style={{ padding:"16px 18px", borderLeft:`3px solid ${color}` }}>
+            <div style={{ fontSize:24, fontWeight:800, color, letterSpacing:"-0.5px", marginBottom:3 }}>{val}</div>
+            <div style={{ fontSize:12, fontWeight:600, color:T.text }}>{label}</div>
           </Card>
         ))}
       </div>
@@ -4553,7 +4550,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
       <Card style={{ marginBottom:16, padding:"14px 18px" }}>
         <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
           <div style={{ flex:1, minWidth:200 }}>
-            <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, company…" prefix="🔍" />
+            <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, company…" prefix="" />
           </div>
           <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ padding:"8px 12px", borderRadius:8, fontSize:12, border:`1px solid ${T.border}`, background:T.surface, color:T.text, minWidth:120 }}>
             <option value="all">All Roles</option>
@@ -4571,12 +4568,12 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
       <Card style={{ padding:0, overflow:"hidden" }}>
         {loading ? (
           <div style={{ textAlign:"center", padding:"60px 0", color:T.textDim }}>
-            <span style={{ fontSize:28 }}>⏳</span>
+            <span style={{ fontSize:13, color:T.textSub }}>Loading…</span>
             <p style={{ marginTop:12, fontSize:13 }}>Loading users…</p>
           </div>
         ) : filtered.length===0 ? (
           <div style={{ textAlign:"center", padding:"60px 0", color:T.textDim }}>
-            <div style={{ fontSize:36, marginBottom:10 }}>{users.length===0 ? "🔒" : "🔍"}</div>
+            <div style={{ fontSize:36, marginBottom:10 }}>""</div>
             {users.length===0 ? (
               <>
                 <p style={{ fontSize:14, fontWeight:600, color:T.text, marginBottom:6 }}>No users loaded</p>
@@ -4585,7 +4582,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
                 </p>
                 <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
                   <Btn size="sm" variant="secondary" icon="↺" onClick={loadUsers}>Retry</Btn>
-                  <Btn size="sm" variant="primary" icon="🔧" onClick={() => {
+                  <Btn size="sm" variant="primary" icon="→" onClick={() => {
                     const sql = `-- Fix RLS infinite recursion\nDROP POLICY IF EXISTS "Admins can read all profiles" ON profiles;\nDROP POLICY IF EXISTS "Admins can update profiles" ON profiles;\nCREATE POLICY "Admins can read all profiles" ON profiles FOR SELECT USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR auth.uid() = id);\nCREATE POLICY "Admins can update profiles" ON profiles FOR UPDATE USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');`;
                     navigator.clipboard?.writeText(sql);
                     alert("SQL copied to clipboard!\n\nPaste and run it in:\nSupabase Dashboard → SQL Editor");
@@ -4634,26 +4631,26 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
                   {/* View */}
                   <button title="View Profile" disabled={actioning===u.id}
                     onClick={() => setViewUser(u)}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.border}`, background:T.surface, color:T.textMid }}>
-                    👁
+                    style={{ padding:"4px 10px", borderRadius:6, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.border}`, background:T.surface, color:T.textMid }}>
+                    View
                   </button>
                   {/* Edit */}
                   <button title="Edit Profile" disabled={actioning===u.id || u.id===adminUser.id}
                     onClick={() => openEditUser(u)}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${T.accent}44`, background:T.accentDim, color:T.accent, opacity:u.id===adminUser.id?0.45:1 }}>
-                    ✏
+                    style={{ padding:"4px 10px", borderRadius:6, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${T.accent}44`, background:T.accentDim, color:T.accent, opacity:u.id===adminUser.id?0.45:1 }}>
+                    Edit
                   </button>
                   {/* Hold / Unhold */}
                   <button title={u.status==="on_hold"?"Unhold":"Put on Hold"} disabled={actioning===u.id||u.id===adminUser.id}
                     onClick={() => toggleHold(u)}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(actioning===u.id||u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${u.status==="on_hold"?T.green+"66":T.purple+"66"}`, background:u.status==="on_hold"?T.greenDim:T.purpleDim, color:u.status==="on_hold"?T.green:T.purple, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1 }}>
-                    {actioning===u.id ? "…" : u.status==="on_hold" ? "▶" : "⏸"}
+                    style={{ padding:"4px 10px", borderRadius:6, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:(actioning===u.id||u.id===adminUser.id)?"not-allowed":"pointer", border:`1px solid ${u.status==="on_hold"?T.green+"66":T.purple+"66"}`, background:u.status==="on_hold"?T.greenDim:T.purpleDim, color:u.status==="on_hold"?T.green:T.purple, opacity:(actioning===u.id||u.id===adminUser.id)?0.45:1 }}>
+                    {actioning===u.id ? "…" : u.status==="on_hold" ? "Unhold" : "Hold"}
                   </button>
                   {/* Reset Password */}
                   <button title="Reset Password" disabled={actioning===u.id}
                     onClick={() => { setResetModal(u); setNewPassErr(""); setNewPass(""); }}
-                    style={{ padding:"5px 9px", borderRadius:7, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.amber}44`, background:T.amberDim||T.accentDim, color:T.amber||T.accent }}>
-                    🔑
+                    style={{ padding:"4px 10px", borderRadius:6, fontSize:11, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.amber}44`, background:T.amberDim, color:T.amber }}>
+                    Pwd Reset
                   </button>
                   {/* Change Role inline */}
                   <select title="Change Role" disabled={actioning===u.id||u.id===adminUser.id}
