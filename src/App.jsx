@@ -645,9 +645,18 @@ const aiLedger = desc => {
   return "Suspense Account";
 };
 
+// ── XML string escaper ────────────────────────────────────────────
+const escXml = s => String(s||"")
+  .replace(/&/g,"&amp;")
+  .replace(/</g,"&lt;")
+  .replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;")
+  .replace(/'/g,"&apos;");
+
+// ── Voucher type logic — with credit/debit validation ────────────
 const voucherType = (debit, credit, ledger) => {
   const lg = (ledger || "").toLowerCase();
-  // Contra: money moving between two bank/cash accounts (e.g. HDFC → ICICI)
+  // Contra: inter-bank or bank-cash transfers
   if ((lg.includes("bank") || lg.includes("cash") || lg.includes("contra")) &&
       !lg.includes("charges") && !lg.includes("sundry") && !lg.includes("salary")) return "Contra";
   if (credit && !debit) return "Receipt";
@@ -655,10 +664,34 @@ const voucherType = (debit, credit, ledger) => {
   return "Journal";
 };
 
+// ── Voucher validation: flag credit+Payment or debit+Receipt ─────
+const validateVoucherType = (row) => {
+  const vt = row.voucherType || voucherType(row.debit, row.credit, row.ledger);
+  if (row.credit && !row.debit && vt === "Payment") return { valid:false, issue:"Credit entry mapped to Payment voucher", fix:"Receipt" };
+  if (row.debit && !row.credit && vt === "Receipt") return { valid:false, issue:"Debit entry mapped to Receipt voucher", fix:"Payment" };
+  return { valid:true };
+};
+
+// ── Running balance checker — flags rows where stated balance drifts ──
+const checkRunningBalance = (rows) => {
+  let running = null;
+  return rows.map(r => {
+    const stated = parseFloat(String(r.balance||"").replace(/,/g,""));
+    const debit  = parseFloat(String(r.debit||"0").replace(/,/g,""));
+    const credit = parseFloat(String(r.credit||"0").replace(/,/g,""));
+    if (isNaN(stated)) return { ...r, balanceMismatch: false };
+    if (running === null) { running = stated; return { ...r, balanceMismatch: false }; }
+    const expected = parseFloat((running - debit + credit).toFixed(2));
+    const mismatch = Math.abs(expected - stated) > 0.02; // 2 paise tolerance
+    if (!mismatch) running = stated;
+    return { ...r, balanceMismatch: mismatch, expectedBalance: expected };
+  });
+};
+
+// ── Duplicate detection (hashing map) ────────────────────────────
 const detectDuplicates = rows => {
   const seen = new Map();
   return rows.map(r => {
-    // Key: date + amounts + first 60 chars of narration (25 was too short — false duplicates on similar descriptions)
     const key = `${String(r.date).slice(0,10)}|${String(r.debit||"").replace(/,/g,"")}|${String(r.credit||"").replace(/,/g,"")}|${String(r.narration).slice(0,60).toLowerCase().replace(/\s+/g," ").trim()}`;
     if (seen.has(key)) return { ...r, isDuplicate: true, duplicateOf: seen.get(key) };
     seen.set(key, r.id);
@@ -666,52 +699,79 @@ const detectDuplicates = rows => {
   });
 };
 
-// Tally XML generator
+// ── Compliance Score calculator ──────────────────────────────────
+const calcComplianceScore = (rows) => {
+  if (!rows.length) return 100;
+  const total = rows.length;
+  const suspense   = rows.filter(r => r.ledger === "Suspense Account").length;
+  const dups       = rows.filter(r => r.isDuplicate).length;
+  const mismatches = rows.filter(r => r.balanceMismatch).length;
+  const badVoucher = rows.filter(r => !validateVoucherType(r).valid).length;
+  const deductions = (suspense/total)*35 + (dups/total)*25 + (mismatches/total)*20 + (badVoucher/total)*20;
+  return Math.max(0, Math.round(100 - deductions));
+};
+
+// ── Tally-Prime compliant XML generator (audit-fixed) ────────────
 const toTallyXML = (rows, company, fy = "2024-25") => {
-  const [fyStart, fyEnd] = fy.split("-");
-  const vouchers = rows.filter(r => !r.isDuplicate || r.forceImport).map(r => {
-    const amt = parseFloat(r.debit || r.credit || 0);
-    const isDebit = !!r.debit;
-    const vtype = r.voucherType || voucherType(r.debit, r.credit, r.ledger);
-    return `
-  <VOUCHER REMOTEID="${(() => {
-    // Stable ID based on content — prevents Tally duplicate on re-import
-    const raw = String(r.date||"") + "|" + String(r.debit||r.credit||"") + "|" + String(r.narration||"").slice(0,40);
+  const tallyDate = raw => {
+    const s = String(raw || "");
+    const months = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
+    const m1 = s.match(/(\d{1,2})[\s\-\/]([a-z]{3})[\s\-\/](\d{4})/i);
+    if (m1) return m1[3]+(months[m1[2].toLowerCase()]||"01")+String(m1[1]).padStart(2,"0");
+    const m2 = s.match(/^(\d{4})[\-\/\.](\d{1,2})[\-\/\.](\d{1,2})/);
+    if (m2) return m2[1]+String(m2[2]).padStart(2,"0")+String(m2[3]).padStart(2,"0");
+    const m3 = s.match(/^(\d{1,2})[\-\/\.](\d{1,2})[\-\/\.](\d{4})/);
+    if (m3) return m3[3]+String(m3[2]).padStart(2,"0")+String(m3[1]).padStart(2,"0");
+    return s.replace(/[^0-9]/g,"").slice(0,8);
+  };
+
+  const stableGuid = r => {
+    const raw = String(r.date||"")+"|"+String(r.debit||r.credit||"")+"|"+String(r.narration||"").slice(0,40);
     let h = 5381;
-    for (let i=0;i<raw.length;i++) { h = ((h<<5)+h)+raw.charCodeAt(i); h=h&h; }
-    return "B2T" + Math.abs(h).toString(36).toUpperCase().padStart(8,"0");
-  })()}" VCHTYPE="${vtype}" ACTION="Create">
-    <DATE>${(() => {
-      const raw = String(r.date || "");
-      // Try parsing as Date and format as YYYYMMDD for Tally
-      const months = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
-      // DD-Mon-YYYY (e.g. "21 May 2026" or "21-May-2026")
-      const m1 = raw.match(/(\d{1,2})[\s\-\/]([a-z]{3})[\s\-\/](\d{4})/i);
-      if (m1) return m1[3] + (months[m1[2].toLowerCase()]||"01") + String(m1[1]).padStart(2,"0");
-      // YYYY-MM-DD or YYYY/MM/DD
-      const m2 = raw.match(/^(\d{4})[\-\/\.](\d{1,2})[\-\/\.](\d{1,2})/);
-      if (m2) return m2[1] + String(m2[2]).padStart(2,"0") + String(m2[3]).padStart(2,"0");
-      // DD/MM/YYYY or DD-MM-YYYY
-      const m3 = raw.match(/^(\d{1,2})[\-\/\.](\d{1,2})[\-\/\.](\d{4})/);
-      if (m3) return m3[3] + String(m3[2]).padStart(2,"0") + String(m3[1]).padStart(2,"0");
-      // Fallback: strip non-digits
-      return raw.replace(/[^0-9]/g,"").slice(0,8);
-    })()}</DATE>
-    <NARRATION>${(r.narration || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}</NARRATION>
-    <VOUCHERTYPENAME>${vtype}</VOUCHERTYPENAME>
-    <PARTYLEDGERNAME>${r.ledger}</PARTYLEDGERNAME>
-    <ALLLEDGERENTRIES.LIST>
-      <LEDGERNAME>${isDebit ? r.ledger : company.bankLedger || company.name || "Bank Account"}</LEDGERNAME>
-      <ISDEEMEDPOSITIVE>${isDebit ? "No" : "Yes"}</ISDEEMEDPOSITIVE>
-      <AMOUNT>${isDebit ? amt : -amt}</AMOUNT>
-    </ALLLEDGERENTRIES.LIST>
-    <ALLLEDGERENTRIES.LIST>
-      <LEDGERNAME>${isDebit ? company.bankLedger || company.name || "Bank Account" : r.ledger}</LEDGERNAME>
-      <ISDEEMEDPOSITIVE>${isDebit ? "Yes" : "No"}</ISDEEMEDPOSITIVE>
-      <AMOUNT>${isDebit ? -amt : amt}</AMOUNT>
-    </ALLLEDGERENTRIES.LIST>
-  </VOUCHER>`;
+    for (let i=0;i<raw.length;i++){h=((h<<5)+h)+raw.charCodeAt(i);h=h&h;}
+    return "B2T-"+Math.abs(h).toString(36).toUpperCase().padStart(8,"0");
+  };
+
+  const bankLedger = escXml(company.bankLedger || company.name || "Bank Account");
+
+  const vouchers = rows.filter(r => !r.isDuplicate || r.forceImport).map((r, idx) => {
+    const amt     = parseFloat(String(r.debit||r.credit||"0").replace(/,/g,""));
+    const isDebit = !!r.debit && !r.credit;  // true = money left bank (Payment/Contra)
+    const vtype   = r.voucherType || voucherType(r.debit, r.credit, r.ledger);
+    const ledger  = escXml(r.ledger || "Suspense A/c");
+    const dt      = tallyDate(r.date);
+    const narr    = escXml((r.narration||"")+(r.ref?` [Ref: ${r.ref}]`:"")+" [Imported via Bank2Tally]");
+
+    // Tally Prime double-entry convention:
+    // For a PAYMENT (bank debit): bank entry amount = negative, expense entry = positive
+    // For a RECEIPT (bank credit): bank entry amount = positive, income entry = negative
+    const bankAmt   = isDebit ? -amt : amt;
+    const ledgerAmt = isDebit ?  amt : -amt;
+    const bankPos   = isDebit ? "No"  : "Yes";  // ISDEEMEDPOSITIVE for bank
+    const ledgPos   = isDebit ? "Yes" : "No";   // ISDEEMEDPOSITIVE for ledger
+
+    return `        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <VOUCHER REMOTEID="${stableGuid(r)}" VCHTYPE="${escXml(vtype)}" ACTION="Create" OBJVIEW="Accounting VoucherView">
+            <DATE>${dt}</DATE>
+            <EFFECTIVEDATE>${dt}</EFFECTIVEDATE>
+            <GUID>${stableGuid(r)}-${idx}</GUID>
+            <VOUCHERTYPENAME>${escXml(vtype)}</VOUCHERTYPENAME>
+            <PARTYLEDGERNAME>${ledger}</PARTYLEDGERNAME>
+            <NARRATION>${narr}</NARRATION>
+            <ALLLEDGERENTRIES.LIST>
+              <LEDGERNAME>${bankLedger}</LEDGERNAME>
+              <ISDEEMEDPOSITIVE>${bankPos}</ISDEEMEDPOSITIVE>
+              <AMOUNT>${bankAmt.toFixed(2)}</AMOUNT>
+            </ALLLEDGERENTRIES.LIST>
+            <ALLLEDGERENTRIES.LIST>
+              <LEDGERNAME>${ledger}</LEDGERNAME>
+              <ISDEEMEDPOSITIVE>${ledgPos}</ISDEEMEDPOSITIVE>
+              <AMOUNT>${ledgerAmt.toFixed(2)}</AMOUNT>
+            </ALLLEDGERENTRIES.LIST>
+          </VOUCHER>
+        </TALLYMESSAGE>`;
   }).join("\n");
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <ENVELOPE>
   <HEADER>
@@ -722,10 +782,11 @@ const toTallyXML = (rows, company, fy = "2024-25") => {
       <REQUESTDESC>
         <REPORTNAME>Vouchers</REPORTNAME>
         <STATICVARIABLES>
-          <SVCURRENTCOMPANY>${(company.name||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</SVCURRENTCOMPANY>
+          <SVCURRENTCOMPANY>${escXml(company.name||"")}</SVCURRENTCOMPANY>
         </STATICVARIABLES>
       </REQUESTDESC>
-      <REQUESTDATA>${vouchers}
+      <REQUESTDATA>
+${vouchers}
       </REQUESTDATA>
     </IMPORTDATA>
   </BODY>
@@ -3509,7 +3570,7 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
 // ══════════════════════════════════════════════════════════════════
 // SCREEN: Preview & Export
 // ══════════════════════════════════════════════════════════════════
-function PreviewScreen({ rows, filename, selectedCompanies, onBack, onImport, auditLog, tally }) {
+function PreviewScreen({ rows, setRows, filename, selectedCompanies, onBack, onImport, auditLog, tally }) {
   const [exporting, setExporting] = useState(null);
   const [showXml, setShowXml] = useState(false);
   const [selectedCompanyForXml, setSelectedCompanyForXml] = useState(selectedCompanies[0]);
@@ -3589,14 +3650,92 @@ function PreviewScreen({ rows, filename, selectedCompanies, onBack, onImport, au
       <h2 style={{ fontSize:20, fontWeight:700, color:T.text, marginBottom:4 }}>Preview & Export</h2>
       <p style={{ color:T.textDim, fontSize:13, marginBottom:20 }}>Final review before pushing to Tally or exporting</p>
 
-      {/* Summary */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:12, marginBottom:20 }}>
-        <StatCard icon="📑" label="Transactions" value={validRows.length} color={T.accent} />
-        <StatCard icon="📤" label="Total Debit" value={"₹"+fmt(totalDebit)} color={T.red} />
-        <StatCard icon="📥" label="Total Credit" value={"₹"+fmt(totalCredit)} color={T.green} />
-        <StatCard icon="⚖️" label="Net Balance" value={(net>=0?"↑":"↓")+"₹"+fmt(Math.abs(net))} color={net>=0?T.green:T.red} />
-        <StatCard icon="⚠️" label="Suspense" value={validRows.filter(r=>r.ledger==="Suspense Account").length} color={T.amber} />
-      </div>
+      {/* ── Audit Compliance Bento Grid ── */}
+      {(() => {
+        const score = calcComplianceScore(validRows);
+        const mismatches = validRows.filter(r=>r.balanceMismatch).length;
+        const badVoucher = validRows.filter(r=>!validateVoucherType(r).valid).length;
+        const suspense   = validRows.filter(r=>r.ledger==="Suspense Account").length;
+        const dups       = rows.filter(r=>r.isDuplicate).length;
+        const scoreColor = score>=90?T.green:score>=70?T.amber:T.red;
+        return (
+          <div style={{ marginBottom:20 }}>
+            {/* Top stat row */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:10 }}>
+              <StatCard label="Transactions" value={validRows.length} color={T.accent} />
+              <StatCard label="Total Debit" value={"₹"+fmt(totalDebit)} color={T.red} />
+              <StatCard label="Total Credit" value={"₹"+fmt(totalCredit)} color={T.green} />
+              <StatCard label="Net Balance" value={(net>=0?"+ ":"- ")+"₹"+fmt(Math.abs(net))} color={net>=0?T.green:T.red} />
+              <StatCard label="Suspense" value={suspense} color={suspense>0?T.amber:T.green} />
+            </div>
+            {/* Compliance bento */}
+            <Card style={{ padding:"16px 20px" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>Audit Compliance Score</div>
+                  <div style={{ fontSize:11, color:T.textSub, marginTop:1 }}>Based on unmapped, duplicate, balance & voucher checks</div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ fontSize:32, fontWeight:900, color:scoreColor, fontFamily:T.mono }}>{score}%</div>
+                  <div style={{ width:60, height:60, position:"relative" }}>
+                    <svg viewBox="0 0 36 36" style={{ transform:"rotate(-90deg)" }}>
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke={T.border} strokeWidth="3"/>
+                      <circle cx="18" cy="18" r="15.9" fill="none" stroke={scoreColor} strokeWidth="3"
+                        strokeDasharray={`${score} ${100-score}`} strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              {/* Score deduction breakdown */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+                {[
+                  { label:"Balance Mismatches", val:mismatches, color:mismatches>0?T.red:T.green,
+                    action: mismatches>0 ? ()=>{ setRows(prev=>prev.map(r=>r.balanceMismatch?{...r,balance:String(r.expectedBalance||r.balance)}:r)); toast("Balance mismatches auto-repaired","success"); } : null,
+                    actionLabel:"Auto-Repair" },
+                  { label:"Voucher Type Errors", val:badVoucher, color:badVoucher>0?T.red:T.green,
+                    action: badVoucher>0 ? ()=>{ setRows(prev=>prev.map(r=>{ const v=validateVoucherType(r); return !v.valid?{...r,voucherType:v.fix}:r; })); toast("Voucher types auto-corrected","success"); } : null,
+                    actionLabel:"Quick-Fix All" },
+                  { label:"Duplicates Skipped", val:dups, color:dups>0?T.amber:T.green, action:null },
+                  { label:"Suspense Rows", val:suspense, color:suspense>0?T.amber:T.green, action:null },
+                ].map(item=>(
+                  <div key={item.label} style={{ background:item.val>0?`${item.color}10`:T.greenDim, border:`1px solid ${item.val>0?item.color+"33":T.green+"33"}`, borderRadius:9, padding:"10px 12px" }}>
+                    <div style={{ fontSize:20, fontWeight:800, color:item.color, marginBottom:2 }}>{item.val}</div>
+                    <div style={{ fontSize:11, color:T.textMid, fontWeight:500, marginBottom:item.action?6:0 }}>{item.label}</div>
+                    {item.action && (
+                      <button onClick={item.action}
+                        style={{ fontSize:10, fontWeight:700, color:item.color, background:`${item.color}15`, border:`1px solid ${item.color}44`, borderRadius:5, padding:"2px 8px", cursor:"pointer", fontFamily:T.font }}>
+                        {item.actionLabel}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* Mismatch detail rows */}
+              {mismatches > 0 && (
+                <div style={{ marginTop:12, background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"8px 12px" }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:T.red, marginBottom:6 }}>Balance Mismatch Details</div>
+                  {validRows.filter(r=>r.balanceMismatch).slice(0,3).map((r,i)=>(
+                    <div key={i} style={{ fontSize:11, color:T.textMid, marginBottom:3 }}>
+                      Row {i+1} · {r.date} · {r.narration?.slice(0,30)} · Stated: ₹{r.balance} · Expected: ₹{r.expectedBalance?.toFixed(2)}
+                    </div>
+                  ))}
+                  {mismatches>3 && <div style={{ fontSize:10, color:T.textSub }}>…and {mismatches-3} more. Click Auto-Repair to fix all.</div>}
+                </div>
+              )}
+              {/* Voucher error detail */}
+              {badVoucher > 0 && (
+                <div style={{ marginTop:8, background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"8px 12px" }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:T.red, marginBottom:4 }}>Voucher Type Issues</div>
+                  {validRows.filter(r=>!validateVoucherType(r).valid).slice(0,3).map((r,i)=>{
+                    const v = validateVoucherType(r);
+                    return <div key={i} style={{ fontSize:11, color:T.textMid, marginBottom:2 }}>{r.date} · {r.narration?.slice(0,25)} · {v.issue} → should be "{v.fix}"</div>;
+                  })}
+                </div>
+              )}
+            </Card>
+          </div>
+        );
+      })()}
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
         {/* Ledger breakdown */}
@@ -3679,9 +3818,21 @@ function PreviewScreen({ rows, filename, selectedCompanies, onBack, onImport, au
                   <td style={{ padding:"8px 14px", textAlign:"right", color:T.red, fontFamily:T.mono }}>{r.debit?fmt(r.debit):""}</td>
                   <td style={{ padding:"8px 14px", textAlign:"right", color:T.green, fontFamily:T.mono }}>{r.credit?fmt(r.credit):""}</td>
                   <td style={{ padding:"8px 14px" }}>
-                    <Pill size="xs" color={voucherType(r.debit,r.credit,r.ledger)==="Receipt"?"green":voucherType(r.debit,r.credit,r.ledger)==="Payment"?"red":"blue"}>
-                      {voucherType(r.debit,r.credit,r.ledger)}
-                    </Pill>
+                    {(() => {
+                      const vt = r.voucherType || voucherType(r.debit, r.credit, r.ledger);
+                      const validation = validateVoucherType({...r, voucherType: vt});
+                      return (
+                        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                          <Pill size="xs" color={!validation.valid?"red":vt==="Receipt"?"green":vt==="Payment"?"red":"blue"}>{vt}</Pill>
+                          {!validation.valid && (
+                            <button title={validation.issue} onClick={()=>setRows(prev=>prev.map(x=>x.id===r.id?{...x,voucherType:validation.fix}:x))}
+                              style={{ fontSize:9, fontWeight:700, background:T.greenDim, color:T.green, border:`1px solid ${T.green}44`, borderRadius:4, padding:"1px 5px", cursor:"pointer", fontFamily:T.font }}>
+                              Fix→{validation.fix}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td style={{ padding:"8px 14px" }}>
                     <Pill size="xs" color={r.ledger==="Suspense Account"?"amber":"blue"}>{r.ledger}</Pill>
@@ -5212,10 +5363,14 @@ function AppInner() {
         aiLedger: ai, ledger: ai, isDuplicate: false,
       };
     }).filter(r => r.date || r.debit || r.credit);
-    setRows(detectDuplicates(built));
+    setRows(checkRunningBalance(detectDuplicates(built)));
     setScreen(SCREENS.LEDGER);
     const dups = built.filter(r=>r.isDuplicate).length;
-    toast(`${built.length} transactions processed${dups>0?` · ${dups} duplicates flagged`:""}`, dups>0?"warn":"success");
+    const mismatches = built.filter(r=>r.balanceMismatch).length;
+    toast(
+      `${built.length} transactions processed${dups>0?` · ${dups} duplicates flagged`:""}${mismatches>0?` · ${mismatches} balance mismatches`:""}`,
+      dups>0||mismatches>0?"warn":"success"
+    );
   };
 
   const onImport = () => {
@@ -5357,7 +5512,7 @@ function AppInner() {
           {screen === SCREENS.UPLOAD && <UploadScreen onParsed={onParsed} selectedCompanies={selectedCompanies} setSelectedCompanies={setSelectedCompanies} tally={tally} />}
           {screen === SCREENS.COLUMN_MAP && <ColumnMapScreen headers={headers} templateKey={templateKey} onMapped={onMapped} onBack={()=>setScreen(SCREENS.UPLOAD)} />}
           {screen === SCREENS.LEDGER && <LedgerScreen rows={rows} setRows={setRows} onNext={()=>setScreen(SCREENS.PREVIEW)} onBack={()=>setScreen(SCREENS.COLUMN_MAP)} auditLog={auditLog} setAuditLog={setAuditLog} user={user} tally={tally} />}
-          {screen === SCREENS.PREVIEW && <PreviewScreen rows={rows} filename={filename} selectedCompanies={selectedCompanies} onBack={()=>setScreen(SCREENS.LEDGER)} onImport={onImport} auditLog={auditLog} tally={tally} />}
+          {screen === SCREENS.PREVIEW && <PreviewScreen rows={rows} setRows={setRows} filename={filename} selectedCompanies={selectedCompanies} onBack={()=>setScreen(SCREENS.LEDGER)} onImport={onImport} auditLog={auditLog} tally={tally} />}
           {screen === SCREENS.HISTORY && <HistoryScreen history={history} onReimport={onReimport} onDeleteEntry={deleteHistoryEntry} onClearAll={clearAllHistory} onBack={()=>setScreen(SCREENS.DASHBOARD)} />}
           {screen === SCREENS.SETTINGS && <SettingsScreen user={user} onLogout={onLogout} onUserUpdate={u=>setUser(u)} tally={tally} tallyHost={tallyHost} setTallyHost={setTallyHost} tallyPort={tallyPort} setTallyPort={setTallyPort} defaultLedger={defaultLedger} setDefaultLedger={setDefaultLedger} autoDetectLedger={autoDetectLedger} setAutoDetectLedger={setAutoDetectLedger} />}
           {screen === SCREENS.USER_MGMT && isAdmin && <UserManagementScreen adminUser={user} />}
