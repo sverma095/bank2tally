@@ -2536,7 +2536,17 @@ function LoginScreen({ onLogin }) {
         {/* ── Brand Header ── */}
         <div style={{ textAlign:"center", marginBottom:24 }}>
           <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
-            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1d4ed8, #2563eb, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, boxShadow:"0 0 0 1px rgba(37,99,235,0.2), 0 0 40px rgba(37,99,235,0.15), 0 8px 24px rgba(0,0,0,0.12)" }}>🏦</div>
+            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1d4ed8, #2563eb, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 0 1px rgba(37,99,235,0.2), 0 0 40px rgba(37,99,235,0.15), 0 8px 24px rgba(0,0,0,0.12)" }}>
+                <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                  <rect x="10" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                  <rect x="16" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                  <rect x="22" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                  <rect x="28" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                  <rect x="2" y="31" width="33" height="3" rx="1.5" fill="white"/>
+                  <polygon points="19,4 2,15 36,15" fill="white" fillOpacity="0.95"/>
+                </svg>
+              </div>
           </div>
           <h1 style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px", marginBottom:3, background:"linear-gradient(135deg, #1d4ed8 40%, #7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</h1>
           <p style={{ color:T.textMid, fontSize:11, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>Professional Bank Statement Importer</p>
@@ -3067,11 +3077,17 @@ function UploadScreen({ onParsed, selectedCompanies, setSelectedCompanies, tally
           </div>
         ) : (
           <>
-            <div style={{ fontSize:40, marginBottom:14 }}>🏦</div>
+            <div style={{ marginBottom:14, display:"flex", justifyContent:"center" }}>
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="6" y="28" width="36" height="4" rx="2" fill={T.border}/>
+                  <rect x="6" y="36" width="36" height="4" rx="2" fill={T.border}/>
+                  <path d="M24 6 L24 26 M24 6 L16 14 M24 6 L32 14" stroke={T.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
             <p style={{ fontWeight:700, fontSize:16, color:T.text, marginBottom:6 }}>Drop bank statement here</p>
             <p style={{ color:T.textDim, fontSize:13 }}>or <span style={{color:T.accent, textDecoration:"underline"}}>browse files</span></p>
             <div style={{ display:"flex", gap:8, justifyContent:"center", marginTop:16, flexWrap:"wrap" }}>
-              {["📄 CSV", "📊 .xlsx / .xls", "📑 PDF (text + OCR)"].map(l => (
+              {["CSV", ".xlsx / .xls", "PDF (text + OCR)"].map(l => (
                 <span key={l} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:6, padding:"3px 10px", fontSize:11, color:T.textDim }}>{l}</span>
               ))}
             </div>
@@ -5263,7 +5279,17 @@ function AppInner() {
         <div style={{ width:220, background:T.surface, borderRight:`1px solid ${T.border}`, padding:"20px 0", display:"flex", flexDirection:"column", flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100 }}>
           <div style={{ padding:"18px 16px 16px", borderBottom:`1px solid ${T.border}` }}>
             <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:12 }}>
-              <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(145deg,#1d4ed8,#2563eb,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:21, flexShrink:0, boxShadow:"0 4px 20px rgba(37,99,235,0.30)" }}>🏦</div>
+              <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(145deg,#1d4ed8,#2563eb,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 20px rgba(37,99,235,0.30)" }}>
+                  <svg width="22" height="22" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="4" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                    <rect x="10" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                    <rect x="16" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                    <rect x="22" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                    <rect x="28" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
+                    <rect x="2" y="31" width="33" height="3" rx="1.5" fill="white"/>
+                    <polygon points="19,4 2,15 36,15" fill="white" fillOpacity="0.95"/>
+                  </svg>
+                </div>
               <div>
                 <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#1d4ed8 30%,#7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>Bank2Tally</div>
                 <div style={{ fontSize:9.5, color:"#64748b", letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:700, marginTop:1 }}>By Verma Consultancy</div>
