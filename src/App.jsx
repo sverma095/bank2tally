@@ -977,6 +977,7 @@ function detectBank(pages) {
   const compact  = rawItems.join("").toLowerCase();  // no spaces — catches "I C I C I B a n k"
   const test     = s => sample.includes(s) || compact.includes(s);
 
+  if (/\bdbs\b|development\s*bank\s*of\s*singapore|dbsssgsg|posb\s*bank|fast\s*payment.*26-\d{3}|autosave\s*transfer/i.test(sample)) return "dbs";
   if (test("icicibank") || test("icici bank") || test("icic0") || test("icicibank.com") || /detailed\s*statement|cr\/dr.*transaction.*amount/i.test(sample) || (/account\s*statement/i.test(sample) && /icic/i.test(compact))) return "icici";
   if (test("state bank of india") || test("statebankofindia") || /\bsbi\b|sbchq|sbin\d{7}/i.test(sample)) return "sbi";
   if (test("hdfc bank") || test("hdfcbank") || /withdrawal\s*amt\.|deposit\s*amt\./i.test(sample)) return "hdfc";
@@ -1412,6 +1413,155 @@ function parseAxisWords(pages) {
   const rows = txnRows.filter(r=>r.some(Boolean))
     .map(r=>{while(r.length<headers.length)r.push("");return r.slice(0,headers.length);});
   return rows.length ? { headers, rows, _bankHint:"axis" } : null;
+}
+
+// ── DBS Bank Singapore Statement ─────────────────────────────────
+// Format: Trans. Date | Value Date | Transaction Details (multi-line) | Debits | Credits | Running Balance
+// DBS uses a complex multi-line format where one transaction spans 3-7 lines.
+// The transaction detail block contains: type, ref number, UTR, narration, currency, amount
+// Footer lines (Deposit Insurance Scheme, END OF REPORT, Printed On) must be stripped.
+function parseDBSWords(pages) {
+  const allItems = pages.flatMap(p => p.items);
+  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items, 3), width));
+
+  // ── Footer/noise patterns to strip ───────────────────────────────
+  const isNoise = line => /deposit\s*insurance|supplementary\s*retirement|sdic|scheme\s*member|non-bank\s*depositor|aggregate\s*per\s*depositor|end\s*of\s*report|printed\s*(on|by)|page\s*\d+\s*of\s*\d+|transactions\s*performed\s*on\s*a\s*non.working|date\s*requested\s*is\s*a\s*non\s*business|select\s*the\s*next\s*business\s*day|non\s*working\s*day\s*will\s*be\s*posted|foreign\s*currency\s*deposits|dual\s*currency|structured\s*deposits|investment\s*products\s*are\s*not\s*insured|opening\s*balance\s*:|ledger\s*balance\s*:|available\s*balance\s*:|earmark|overdraft\s*limit|account\s*number\s*:|account\s*name\s*:|product\s*type\s*:|total\s*debit\s*count|total\s*credit\s*count|total\s*debit\s*amount|total\s*credit\s*amount/i.test(line);
+
+  const isHeader = line => /trans.*date.*value.*date|value\s*date.*transaction/i.test(line) || /^trans\.?\s*date\s+value\s*date/i.test(line);
+
+  // Find the start of transaction data (after the column header row)
+  let dataStart = 0;
+  for (let i = 0; i < Math.min(allLines.length, 30); i++) {
+    if (isHeader(allLines[i])) { dataStart = i + 1; break; }
+  }
+
+  // ── Build transaction blocks ──────────────────────────────────────
+  // Each transaction starts with a line containing TWO dates (Trans Date + Value Date)
+  // followed by multi-line description, with amounts at the end of some lines.
+  const DATE_RE = /^\d{2}-[A-Za-z]{3}-\d{4}$/;
+  const isTransDate = s => DATE_RE.test(s.trim());
+
+  const transactions = [];
+  let current = null;
+
+  const cleanLines = allLines.slice(dataStart).filter(l => !isNoise(l) && l.trim());
+
+  cleanLines.forEach(line => {
+    const parts = line.split(/\t|\s{2,}/).map(s => s.trim()).filter(Boolean);
+    if (!parts.length) return;
+
+    // New transaction: line starts with a date (Trans Date) — value date may be on same or next part
+    const firstIsDate = isTransDate(parts[0]);
+    const secondIsDate = parts.length > 1 && isTransDate(parts[1]);
+
+    if (firstIsDate) {
+      if (current) transactions.push(current);
+      current = {
+        transDate: parts[0],
+        valueDate: secondIsDate ? parts[1] : parts[0],
+        descParts: [],
+        debit: "",
+        credit: "",
+        balance: "",
+      };
+      // Remaining parts on this same line — could be amount or desc continuation
+      const rest = parts.slice(secondIsDate ? 2 : 1);
+      rest.forEach(tok => {
+        if (isAmountStr(tok)) {
+          // Assign to debit/credit/balance in order
+          if (!current.debit && !current.credit) {
+            // Will sort out debit vs credit later from context
+            current._amts = current._amts || [];
+            current._amts.push(tok);
+          } else {
+            current._amts = current._amts || [];
+            current._amts.push(tok);
+          }
+        } else {
+          current.descParts.push(tok);
+        }
+      });
+    } else if (current) {
+      // Continuation line — extract amounts and description fragments
+      const amounts = parts.filter(isAmountStr);
+      const desc = parts.filter(p => !isAmountStr(p) && !isTransDate(p));
+
+      if (amounts.length) {
+        current._amts = current._amts || [];
+        current._amts.push(...amounts);
+      }
+      if (desc.length) {
+        current.descParts.push(...desc);
+      }
+    }
+  });
+  if (current) transactions.push(current);
+
+  if (!transactions.length) return null;
+
+  // ── Resolve amounts into debit/credit/balance ─────────────────────
+  // DBS format: last amount on the transaction block = Running Balance
+  //             second-to-last = the transaction amount (debit or credit)
+  // We use the running balance delta to determine direction when unclear.
+  const rows = [];
+  let prevBalance = null;
+
+  transactions.forEach(txn => {
+    const amts = (txn._amts || []).map(a => parseFloat(String(a).replace(/,/g, "")));
+    const bal = amts.length >= 1 ? amts[amts.length - 1] : null;
+    const txnAmt = amts.length >= 2 ? amts[amts.length - 2] : (amts.length === 1 ? amts[0] : null);
+
+    let debit = "", credit = "";
+
+    if (txnAmt !== null && bal !== null && prevBalance !== null) {
+      const delta = bal - prevBalance;
+      if (Math.abs(delta + txnAmt) < 0.05) debit = txnAmt.toFixed(2);       // balance decreased
+      else if (Math.abs(delta - txnAmt) < 0.05) credit = txnAmt.toFixed(2); // balance increased
+      else if (delta < 0) debit = txnAmt.toFixed(2);
+      else credit = txnAmt.toFixed(2);
+    } else if (txnAmt !== null) {
+      // No prev balance — use description keywords to guess
+      const desc = txn.descParts.join(" ").toUpperCase();
+      if (/CHARGE|FEE|PAYMENT|DEBIT|REMITTANCE|AUTOSAVE.*FEE|TRANSFER.*FEE/.test(desc)) debit = txnAmt.toFixed(2);
+      else credit = txnAmt.toFixed(2);
+    }
+
+    // Build clean narration — join desc parts, clean up reference codes
+    const rawDesc = txn.descParts.join(" ")
+      .replace(/\s+/g, " ")
+      .replace(/^(26-\d{3}|EBGPP\S+|U:\S+|RTF\s+\S+|IBG\s+\S+)\s*/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // Extract ref number — long alphanumeric codes
+    const refMatch = txn.descParts.join(" ").match(/\b(EBGPP\S+|IBG\s+\S+|RTF\s+\S+|\d{16,}|[A-Z0-9]{15,})\b/);
+    const ref = refMatch ? refMatch[0].trim() : "";
+
+    if (prevBalance === null && bal !== null) {
+      // Try to get opening balance from header
+    }
+    if (bal !== null) prevBalance = bal;
+
+    // Skip rows with no amounts and no meaningful description
+    if (!debit && !credit && !txnAmt) return;
+
+    rows.push([
+      txn.transDate,
+      rawDesc || txn.descParts.join(" "),
+      ref,
+      debit,
+      credit,
+      bal !== null ? bal.toFixed(2) : "",
+    ]);
+  });
+
+  if (!rows.length) return null;
+
+  return {
+    headers: ["Date", "Narration", "Ref", "Debit", "Credit", "Balance"],
+    rows,
+    _bankHint: "dbs",
+  };
 }
 
 // ── Generic / universal fallback parser (text-based) ─────────────
@@ -2044,6 +2194,7 @@ async function parseFile(file, onProgress) {
     onProgress && onProgress(`Detected: ${bank.toUpperCase()} — parsing…`);
 
     const PARSERS = {
+      dbs:         parseDBSWords,
       icici:       parseICICIWords,
       sbi:         parseSBIWords,
       hdfc:        parseHDFCWords,
@@ -2057,10 +2208,10 @@ async function parseFile(file, onProgress) {
       bob:         parseBOBWords,
       rbl:         parseRBLWords,
       txnhistory:  parseTransactionHistoryWords,
-      union:       parseAndhraWords,   // Union Bank has same format as Andhra
-      federal:     parseCanaraWords,   // Federal Bank similar to Canara
-      indus:       parseCanaraWords,   // IndusInd similar layout
-      yes:         parseCanaraWords,   // Yes Bank similar layout
+      union:       parseAndhraWords,
+      federal:     parseCanaraWords,
+      indus:       parseCanaraWords,
+      yes:         parseCanaraWords,
     };
 
     // Try bank-specific parser first
@@ -3581,7 +3732,16 @@ function LedgerScreen({ rows, setRows, onNext, onBack, auditLog, setAuditLog, us
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
           <thead style={{ position:"sticky", top:0, zIndex:2 }}>
             <tr style={{ background:T.surface }}>
-              <th style={{ padding:"10px 8px", width:32 }}></th>
+              <th style={{ padding:"10px 8px", width:36, borderBottom:`1px solid ${T.border}` }}>
+                <input
+                  type="checkbox"
+                  title={selectedRows.size===filtered.length&&filtered.length>0?"Deselect all":"Select all visible"}
+                  checked={filtered.length>0 && selectedRows.size===filtered.length}
+                  ref={el=>{ if(el) el.indeterminate = selectedRows.size>0 && selectedRows.size<filtered.length; }}
+                  onChange={()=> selectedRows.size===filtered.length ? clearSelect() : selectAll()}
+                  style={{ accentColor:T.accent, cursor:"pointer" }}
+                />
+              </th>
               {["Date","Narration","Ref","Debit ₹","Credit ₹","Voucher","AI Ledger","Assign Ledger","Status"].map(h=>(
                 <th key={h} style={{ padding:"10px 12px", textAlign:"left", fontSize:11, fontWeight:600, color:T.textDim, borderBottom:`1px solid ${T.border}`, whiteSpace:"nowrap", letterSpacing:"0.04em" }}>{h.toUpperCase()}</th>
               ))}
