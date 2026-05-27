@@ -584,16 +584,19 @@ const parseIndianDate = v => {
   }
   return new Date(s);
 };
+// Format date as "04 May 2026" — manual format avoids browser locale differences
+const MONTHS_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const fmtDate = v => {
   if (!v) return "";
   const d = parseIndianDate(v);
-  return isNaN(d) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  if (isNaN(d)) return String(v);
+  return `${String(d.getDate()).padStart(2,"0")} ${MONTHS_ABBR[d.getMonth()]} ${d.getFullYear()}`;
 };
 const fmtDateShort = v => {
   if (!v) return "";
   const d = parseIndianDate(v);
-  // Always show year — Tally needs full dates and user needs to verify the year
-  return isNaN(d) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  if (isNaN(d)) return String(v);
+  return `${String(d.getDate()).padStart(2,"0")} ${MONTHS_ABBR[d.getMonth()]} ${d.getFullYear()}`;
 };
 
 const aiLedger = desc => {
