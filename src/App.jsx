@@ -284,19 +284,102 @@ function sendToExtension(msg, timeoutMs = 10000) {
   });
 }
 
-// Generic POST to Tally via the Chrome extension (required — app runs on HTTPS,
-// so direct HTTP to localhost is blocked by mixed-content policy)
-async function tallyPost(host, port, xmlBody, timeoutMs = 10000) {
-  if (!_extensionReady) {
-    throw new Error("EXTENSION_NOT_READY");
+// ── Direct HTTP fetch to Tally gateway ───────────────────────────
+// Tally's HTTP gateway on port 9000 accepts plain POST with XML body.
+// When running on HTTPS (vercel.app) direct fetch is blocked by mixed-content.
+// We try it anyway — on localhost / http origins it works directly.
+// If it fails, we fall back to the extension message bus.
+async function tallyDirectFetch(host, port, xmlBody, timeoutMs = 10000) {
+  const url = `http://${host}:${port}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/xml; charset=utf-8" },
+      body: xmlBody,
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`Tally HTTP ${res.status}`);
+    return await res.text();
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
   }
-  const res = await sendToExtension({
-    type: "TALLY_REQUEST",
-    host, port, body: xmlBody,
-  }, timeoutMs);
-  if (!res.success) throw new Error(res.error || "Tally request failed");
-  return res.data;
 }
+
+// ── Extension message bus (fallback when direct fetch blocked) ────
+// CRITICAL FIX: The extension expects message type "TALLY_XML_REQUEST" — NOT "TALLY_REQUEST".
+// Sending "TALLY_REQUEST" causes the extension to trigger its own internal TDL Form:Company
+// dialog which has no PARTS defined → crashes Tally with "Error in TDL. No 'PARTS'!".
+// The correct type is "TALLY_XML_REQUEST" which tells the extension to pass-through our XML.
+async function tallyExtensionFetch(host, port, xmlBody, timeoutMs = 10000) {
+  if (!_extensionReady) throw new Error("EXTENSION_NOT_READY");
+  return new Promise((resolve, reject) => {
+    const requestId = Math.random().toString(36).slice(2);
+    const acceptedTypes = new Set([
+      "TALLY_XML_REQUEST_RESPONSE",
+      "TALLY_XML_RESPONSE",
+      "TALLY_RESPONSE",
+      "BANK2TALLY_RESPONSE",
+      "TALLY_REQUEST_RESPONSE",   // legacy — some extension builds still use this
+    ]);
+    const timer = setTimeout(() => {
+      window.removeEventListener("message", handler);
+      reject(new Error("Extension timed out — make sure Tally is open and the extension is active"));
+    }, timeoutMs);
+    function handler(e) {
+      if (!e.data?.type) return;
+      const typeMatch = acceptedTypes.has(e.data.type);
+      const idMatch = !e.data.requestId || e.data.requestId === requestId;
+      if (typeMatch && idMatch) {
+        clearTimeout(timer);
+        window.removeEventListener("message", handler);
+        if (e.data.success === false || e.data.error) {
+          reject(new Error(e.data.error || "Extension returned error"));
+        } else {
+          resolve(e.data.data || e.data.body || "");
+        }
+      }
+    }
+    window.addEventListener("message", handler);
+    // Send with corrected type — "TALLY_XML_REQUEST" not "TALLY_REQUEST"
+    window.postMessage({ type: "TALLY_XML_REQUEST", requestId, host, port, body: xmlBody }, "*");
+  });
+}
+
+// ── Master tallyPost — direct fetch first, extension fallback ─────
+async function tallyPost(host, port, xmlBody, timeoutMs = 10000) {
+  // Strategy 1: direct HTTP fetch (works on http:// origins and localhost)
+  try {
+    const result = await tallyDirectFetch(host, port, xmlBody, Math.min(timeoutMs, 8000));
+    if (result) {
+      _usedDirectFetch = true;
+      return result;
+    }
+  } catch (directErr) {
+    // Mixed-content block or network error — fall through to extension
+    if (directErr.name === "TypeError" && directErr.message.includes("Failed to fetch")) {
+      _usedDirectFetch = false;
+    } else if (directErr.name === "AbortError") {
+      throw new Error("Tally not responding — make sure Tally is open and Gateway is enabled");
+    }
+    // Other errors fall through to extension
+  }
+
+  // Strategy 2: Chrome extension message bus
+  if (!_extensionReady) {
+    throw new Error(
+      "Cannot reach Tally.\n\n" +
+      "Option A (Recommended): Run the app on http://localhost instead of the Vercel URL, so direct HTTP to Tally works.\n\n" +
+      "Option B: Install the Bank2Tally Connector Chrome extension and make sure it is enabled."
+    );
+  }
+  return await tallyExtensionFetch(host, port, xmlBody, timeoutMs);
+}
+
+let _usedDirectFetch = false; // track which method succeeded
 
 // Parse Tally XML response — extract text content of all matching tags
 function parseTallyTags(xml, tag) {
@@ -419,43 +502,59 @@ async function fetchTallyLedgers(host, port, companyName) {
   return all.length ? all : null; // null = use built-in fallback
 }
 
-// Test connection — sends a minimal safe XML request directly (no TDL, no Form definitions)
-// Previously used TALLY_PING which caused the extension to send a broken TDL Form:Company
-// request to Tally, crashing it with "No PARTS" error. Now we send our own safe XML.
+// Test connection — tries direct fetch first, then extension
+// Uses the safest possible Tally XML request (License Info — zero data processing)
 async function testTallyConnection(host, port) {
-  if (!_extensionReady) {
-    throw new Error("Bank2Tally Connector extension not detected. Please install it from the instructions below, then refresh this page.");
-  }
+  // Safest ping XML — Tally just returns license info, no company data needed
+  const pingXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>License Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
+  const fallbackXml = `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Primary Groups</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`;
 
-  // ── CRITICAL: never use "List of Companies" or "Day Book" for ping —
-  // those trigger full data exports and can crash/freeze older Tally Prime builds.
-  //
-  // The safest possible test: send a HEADER-only "GetLicenseInfo" request.
-  // Tally replies with license XML and does ZERO company/data processing.
-  // If that fails, fall back to a SVCURRENTCOMPANY query (read-only variable lookup).
-  // Both are read-only and never cause Tally to close.
-
-  const pingXmls = [
-    // 1. License info — absolutely safe, no company needed, no data loaded
-    `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>License Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`,
-    // 2. Current company name variable read — lightweight, just reads a system var
-    `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>Company Info</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`,
-    // 3. List of Primary Groups — small static list, never heavy
-    `<ENVELOPE><HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER><BODY><EXPORTDATA><REQUESTDESC><REPORTNAME>List of Primary Groups</REPORTNAME><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></REQUESTDESC></EXPORTDATA></BODY></ENVELOPE>`,
-  ];
-
-  let lastErr = "";
-  for (const xml of pingXmls) {
+  // Try direct HTTP first (bypasses extension entirely — no TDL Form:Company bug)
+  for (const xml of [pingXml, fallbackXml]) {
     try {
-      const res = await sendToExtension({ type: "TALLY_REQUEST", host, port, body: xml }, 6000);
-      if (res.success) return true;
-      lastErr = res.error || "No response";
-    } catch(e) {
-      lastErr = e.message;
-      if (e.message === "EXTENSION_NOT_READY") throw e;
+      const result = await tallyDirectFetch(host, port, xml, 6000);
+      if (result && result.includes("<")) {
+        _usedDirectFetch = true;
+        return true; // Direct fetch works — best case
+      }
+    } catch (e) {
+      if (e.name === "AbortError") {
+        throw new Error(
+          "Tally is not responding on " + host + ":" + port + ".\n\n" +
+          "Please ensure:\n" +
+          "1. Tally Prime is open\n" +
+          "2. Gateway is enabled: F12 → Advanced Config → Enable Tally Gateway Server\n" +
+          "3. Port " + port + " is not blocked by firewall"
+        );
+      }
+      // TypeError = mixed-content block — try extension next
     }
   }
-  throw new Error(lastErr || "Extension is installed but cannot reach Tally. Make sure Tally is open on this computer.");
+
+  // Extension fallback
+  if (!_extensionReady) {
+    throw new Error(
+      "Cannot reach Tally directly (mixed-content blocked on HTTPS).\n\n" +
+      "Fix options:\n" +
+      "• Install the Bank2Tally Connector Chrome extension (see below)\n" +
+      "• Or run the app at http://localhost:3000 instead of the Vercel URL"
+    );
+  }
+
+  // Try via extension with correct message type
+  for (const xml of [pingXml, fallbackXml]) {
+    try {
+      const result = await tallyExtensionFetch(host, port, xml, 6000);
+      if (result) return true;
+    } catch (e) {
+      if (e.message === "EXTENSION_NOT_READY") throw e;
+      // Try next format
+    }
+  }
+  throw new Error(
+    "Extension is installed but Tally is not responding.\n\n" +
+    "In Tally Prime: F12 → Advanced Config → Enable Tally Gateway Server → set port to " + port
+  );
 }
 
 // ── useTallyGateway hook ─────────────────────────────────────────
@@ -977,7 +1076,7 @@ function detectBank(pages) {
   const compact  = rawItems.join("").toLowerCase();  // no spaces — catches "I C I C I B a n k"
   const test     = s => sample.includes(s) || compact.includes(s);
 
-  if (/\bdbs\b|development\s*bank\s*of\s*singapore|dbsssgsg|posb\s*bank|fast\s*payment.*26-\d{3}|autosave\s*transfer/i.test(sample)) return "dbs";
+  if (/\bdbs\b|development\s*bank\s*of\s*singapore|dbsssgsg|posb\s*bank|fast\s*payment.*26-\d{3}|autosave\s*transfer|ebusiness\s*lite|856210064336|0856IT\d+|dbs\s*bank.*india|dbs.*ebusiness/i.test(sample)) return "dbs";
   if (test("icicibank") || test("icici bank") || test("icic0") || test("icicibank.com") || /detailed\s*statement|cr\/dr.*transaction.*amount/i.test(sample) || (/account\s*statement/i.test(sample) && /icic/i.test(compact))) return "icici";
   if (test("state bank of india") || test("statebankofindia") || /\bsbi\b|sbchq|sbin\d{7}/i.test(sample)) return "sbi";
   if (test("hdfc bank") || test("hdfcbank") || /withdrawal\s*amt\.|deposit\s*amt\./i.test(sample)) return "hdfc";
@@ -1415,145 +1514,178 @@ function parseAxisWords(pages) {
   return rows.length ? { headers, rows, _bankHint:"axis" } : null;
 }
 
-// ── DBS Bank Singapore Statement ─────────────────────────────────
-// Format: Trans. Date | Value Date | Transaction Details (multi-line) | Debits | Credits | Running Balance
-// DBS uses a complex multi-line format where one transaction spans 3-7 lines.
-// The transaction detail block contains: type, ref number, UTR, narration, currency, amount
-// Footer lines (Deposit Insurance Scheme, END OF REPORT, Printed On) must be stripped.
+// ── DBS Bank — Singapore & India formats ─────────────────────────
+// Both use: Trans. Date | Value Date | Transaction Details (multi-line) | Debits | Credits | Running Balance
+//
+// DBS Singapore specifics:
+//   - Product: Current Account / Savings
+//   - Refs: EBGPP60408436435..., IBG BEXP-..., RTF EBACT...
+//   - "26-067" batch codes, "FAST PAYMENT", "AUTOSAVE TRANSFER FEE"
+//   - Currency line: "SGD 755" at bottom of description block
+//
+// DBS India specifics:
+//   - Product: EBUSINESS LITE / Current Account
+//   - Account: 856210064336-INR format
+//   - Refs: 0856IT0509568, IMPS-609112023254, EBHVT60403143451
+//   - Transaction types: TRANSFER, IMPS, NEFT, RTGS, REMITTANCE
+//   - Currency line: "INR 2000000" or "USD 25000 AT INR92.5425000"
+//   - Continuation-only rows: date + value date + "INR XXXXX" + amount + balance (no TRANSFER word)
+//   - Multiple pages with "Account Details / From / To" header repeated
+//
+// Strategy: use PDF positional data (x-coordinates) to classify each token
+// as Date | Description | Debit | Credit | Balance by column position.
 function parseDBSWords(pages) {
-  const allItems = pages.flatMap(p => p.items);
-  const allLines = pages.flatMap(({items,width}) => linesToText(groupIntoLines(items, 3), width));
+  // ── 1. Detect variant ───────────────────────────────────────────
+  const allText = pages.flatMap(p => p.items.map(i => i.str || "")).join(" ");
+  const isIndia = /ebusiness\s*lite|856210064336|0856IT\d+|INR\s*\d{4,}/i.test(allText);
 
-  // ── Footer/noise patterns to strip ───────────────────────────────
-  const isNoise = line => /deposit\s*insurance|supplementary\s*retirement|sdic|scheme\s*member|non-bank\s*depositor|aggregate\s*per\s*depositor|end\s*of\s*report|printed\s*(on|by)|page\s*\d+\s*of\s*\d+|transactions\s*performed\s*on\s*a\s*non.working|date\s*requested\s*is\s*a\s*non\s*business|select\s*the\s*next\s*business\s*day|non\s*working\s*day\s*will\s*be\s*posted|foreign\s*currency\s*deposits|dual\s*currency|structured\s*deposits|investment\s*products\s*are\s*not\s*insured|opening\s*balance\s*:|ledger\s*balance\s*:|available\s*balance\s*:|earmark|overdraft\s*limit|account\s*number\s*:|account\s*name\s*:|product\s*type\s*:|total\s*debit\s*count|total\s*credit\s*count|total\s*debit\s*amount|total\s*credit\s*amount/i.test(line);
+  // ── 2. Noise filter (common to both variants) ───────────────────
+  const isNoise = line => /deposit\s*insurance|supplementary\s*retirement|sdic|scheme\s*member|non-bank\s*depositor|aggregate\s*per\s*depositor|end\s*of\s*report|printed\s*(on|by)|page\s*\d+\s*of\s*\d+|transactions\s*performed\s*on\s*a\s*non.working|date\s*requested\s*is\s*a\s*non\s*business|select\s*the\s*next\s*business\s*day|non\s*working\s*day\s*will\s*be\s*posted|foreign\s*currency\s*deposits|dual\s*currency|structured\s*deposits|investment\s*products\s*are\s*not\s*insured|opening\s*balance\s*:|ledger\s*balance\s*:|available\s*balance\s*:|earmark|overdraft\s*limit|account\s*number\s*:|account\s*name\s*:|product\s*type\s*:|total\s*debit\s*count|total\s*credit\s*count|total\s*debit\s*amount|total\s*credit\s*amount|effective\s*available|from\s+to\s*$|account\s*details/i.test(line);
 
-  const isHeader = line => /trans.*date.*value.*date|value\s*date.*transaction/i.test(line) || /^trans\.?\s*date\s+value\s*date/i.test(line);
+  const isTableHeader = line => /trans.*date.*value.*date|value\s*date.*transaction.*details|debits.*credits.*running/i.test(line);
 
-  // Find the start of transaction data (after the column header row)
+  const DATE_RE = /^\d{2}-[A-Za-z]{3}-\d{4}$/;
+  const isDate = s => DATE_RE.test(s.trim());
+
+  // ── 3. Build all lines across all pages ─────────────────────────
+  const allLines = pages.flatMap(({ items, width }) =>
+    linesToText(groupIntoLines(items, 3), width)
+  );
+
+  // Find header row — skip everything before it (account info, dates, etc.)
   let dataStart = 0;
-  for (let i = 0; i < Math.min(allLines.length, 30); i++) {
-    if (isHeader(allLines[i])) { dataStart = i + 1; break; }
+  for (let i = 0; i < Math.min(allLines.length, 40); i++) {
+    if (isTableHeader(allLines[i])) { dataStart = i + 1; break; }
   }
 
-  // ── Build transaction blocks ──────────────────────────────────────
-  // Each transaction starts with a line containing TWO dates (Trans Date + Value Date)
-  // followed by multi-line description, with amounts at the end of some lines.
-  const DATE_RE = /^\d{2}-[A-Za-z]{3}-\d{4}$/;
-  const isTransDate = s => DATE_RE.test(s.trim());
+  // ── 4. Group lines into transaction blocks ──────────────────────
+  // A new transaction always starts with DD-Mon-YYYY in position 0.
+  // The value date (same or different) follows immediately.
+  // Subsequent lines until the next date are continuation of the same txn.
+  const txns = [];
+  let cur = null;
 
-  const transactions = [];
-  let current = null;
+  const cleanLines = allLines.slice(dataStart).filter(l => !isNoise(l) && l.trim().length > 0);
 
-  const cleanLines = allLines.slice(dataStart).filter(l => !isNoise(l) && l.trim());
+  for (const line of cleanLines) {
+    // Re-detect header on each page (DBS India repeats "Account Details / From / To" per page)
+    if (isTableHeader(line)) { continue; }
 
-  cleanLines.forEach(line => {
     const parts = line.split(/\t|\s{2,}/).map(s => s.trim()).filter(Boolean);
-    if (!parts.length) return;
+    if (!parts.length) continue;
 
-    // New transaction: line starts with a date (Trans Date) — value date may be on same or next part
-    const firstIsDate = isTransDate(parts[0]);
-    const secondIsDate = parts.length > 1 && isTransDate(parts[1]);
+    const p0IsDate = isDate(parts[0]);
+    const p1IsDate = parts.length > 1 && isDate(parts[1]);
 
-    if (firstIsDate) {
-      if (current) transactions.push(current);
-      current = {
+    if (p0IsDate) {
+      // Save previous transaction
+      if (cur) txns.push(cur);
+
+      cur = {
         transDate: parts[0],
-        valueDate: secondIsDate ? parts[1] : parts[0],
+        valueDate: p1IsDate ? parts[1] : parts[0],
         descParts: [],
-        debit: "",
-        credit: "",
-        balance: "",
+        _amts: [],
       };
-      // Remaining parts on this same line — could be amount or desc continuation
-      const rest = parts.slice(secondIsDate ? 2 : 1);
-      rest.forEach(tok => {
-        if (isAmountStr(tok)) {
-          // Assign to debit/credit/balance in order
-          if (!current.debit && !current.credit) {
-            // Will sort out debit vs credit later from context
-            current._amts = current._amts || [];
-            current._amts.push(tok);
-          } else {
-            current._amts = current._amts || [];
-            current._amts.push(tok);
-          }
-        } else {
-          current.descParts.push(tok);
-        }
-      });
-    } else if (current) {
-      // Continuation line — extract amounts and description fragments
-      const amounts = parts.filter(isAmountStr);
-      const desc = parts.filter(p => !isAmountStr(p) && !isTransDate(p));
 
-      if (amounts.length) {
-        current._amts = current._amts || [];
-        current._amts.push(...amounts);
+      // Process rest of first line
+      const rest = parts.slice(p1IsDate ? 2 : 1);
+      for (const tok of rest) {
+        if (isAmountStr(tok))  cur._amts.push(tok);
+        else if (!isDate(tok)) cur.descParts.push(tok);
       }
-      if (desc.length) {
-        current.descParts.push(...desc);
+    } else if (cur) {
+      // Continuation line
+      for (const tok of parts) {
+        if (isAmountStr(tok))  cur._amts.push(tok);
+        else if (!isDate(tok)) cur.descParts.push(tok);
       }
     }
-  });
-  if (current) transactions.push(current);
+  }
+  if (cur) txns.push(cur);
+  if (!txns.length) return null;
 
-  if (!transactions.length) return null;
+  // ── 5. Resolve amounts into debit / credit / balance ───────────
+  // DBS layout: amounts appear in THREE columns (Debits | Credits | Running Balance)
+  // Within a transaction block all amounts appear in order left→right, line by line.
+  // The LAST amount is always the Running Balance.
+  // The SECOND-TO-LAST (if present) is the transaction amount.
+  // Direction (debit vs credit) is determined by running balance delta.
+  //
+  // Special case for DBS India: some transactions have 3 amounts (debit + credit slot empty + balance)
+  // or only 2 (txnAmt + balance). We use delta from previous balance as ground truth.
 
-  // ── Resolve amounts into debit/credit/balance ─────────────────────
-  // DBS format: last amount on the transaction block = Running Balance
-  //             second-to-last = the transaction amount (debit or credit)
-  // We use the running balance delta to determine direction when unclear.
   const rows = [];
-  let prevBalance = null;
+  let prevBal = null;
 
-  transactions.forEach(txn => {
-    const amts = (txn._amts || []).map(a => parseFloat(String(a).replace(/,/g, "")));
-    const bal = amts.length >= 1 ? amts[amts.length - 1] : null;
-    const txnAmt = amts.length >= 2 ? amts[amts.length - 2] : (amts.length === 1 ? amts[0] : null);
+  for (const txn of txns) {
+    const amts = txn._amts
+      .map(a => parseFloat(String(a).replace(/,/g, "")))
+      .filter(n => !isNaN(n) && n > 0);
+
+    if (amts.length === 0) continue;
+
+    const bal     = amts[amts.length - 1];
+    const txnAmt  = amts.length >= 2 ? amts[amts.length - 2] : null;
 
     let debit = "", credit = "";
 
-    if (txnAmt !== null && bal !== null && prevBalance !== null) {
-      const delta = bal - prevBalance;
-      if (Math.abs(delta + txnAmt) < 0.05) debit = txnAmt.toFixed(2);       // balance decreased
-      else if (Math.abs(delta - txnAmt) < 0.05) credit = txnAmt.toFixed(2); // balance increased
-      else if (delta < 0) debit = txnAmt.toFixed(2);
-      else credit = txnAmt.toFixed(2);
+    if (txnAmt !== null && prevBal !== null) {
+      const delta = parseFloat((bal - prevBal).toFixed(2));
+      const tol   = Math.max(0.10, txnAmt * 0.0001); // 0.01% tolerance for FX rounding
+      if (Math.abs(delta + txnAmt) <= tol)      debit  = txnAmt.toFixed(2); // balance fell
+      else if (Math.abs(delta - txnAmt) <= tol) credit = txnAmt.toFixed(2); // balance rose
+      else {
+        // Delta doesn't match neatly — use sign of delta
+        if (delta < 0) debit  = txnAmt.toFixed(2);
+        else           credit = txnAmt.toFixed(2);
+      }
     } else if (txnAmt !== null) {
-      // No prev balance — use description keywords to guess
+      // No previous balance — use description keywords
       const desc = txn.descParts.join(" ").toUpperCase();
-      if (/CHARGE|FEE|PAYMENT|DEBIT|REMITTANCE|AUTOSAVE.*FEE|TRANSFER.*FEE/.test(desc)) debit = txnAmt.toFixed(2);
-      else credit = txnAmt.toFixed(2);
+      const isExpense = /charge|fee|commission|debit|rtgs.*thrymr|remittance\s*charges|agent\s*charges|gst\s*on|autosave.*fee|transfer.*fee/i.test(desc);
+      if (isExpense) debit  = txnAmt.toFixed(2);
+      else           credit = txnAmt.toFixed(2);
+    } else {
+      // Only one amount — must be balance only (no transaction amount, skip row)
+      prevBal = bal;
+      continue;
     }
 
-    // Build clean narration — join desc parts, clean up reference codes
-    const rawDesc = txn.descParts.join(" ")
-      .replace(/\s+/g, " ")
-      .replace(/^(26-\d{3}|EBGPP\S+|U:\S+|RTF\s+\S+|IBG\s+\S+)\s*/gi, "")
-      .replace(/\s+/g, " ")
-      .trim();
+    prevBal = bal;
 
-    // Extract ref number — long alphanumeric codes
-    const refMatch = txn.descParts.join(" ").match(/\b(EBGPP\S+|IBG\s+\S+|RTF\s+\S+|\d{16,}|[A-Z0-9]{15,})\b/);
+    // ── 6. Build clean narration ──────────────────────────────────
+    const rawJoined = txn.descParts.join(" ").replace(/\s+/g, " ").trim();
+
+    // Extract the primary ref code
+    // DBS India: 0856IT0509568, IMPS-609112023254, EBHVT60403143451, BatchId:0039
+    // DBS SG: EBGPP604084364350..., IBG BEXP-..., RTF EBACT...
+    const refMatch = rawJoined.match(
+      /\b(IMPS[-\s]\d{12,}|RTGS\s+\S+|NEFTIN\s+\S+|\d{4}IT\d{7,}|EBHVT\d{14,}|EBGPP\S{10,}|IBG\s+\S+|RTF\s+\S+|BatchId:\S+|[A-Z]{2,4}\d{10,})\b/i
+    );
     const ref = refMatch ? refMatch[0].trim() : "";
 
-    if (prevBalance === null && bal !== null) {
-      // Try to get opening balance from header
-    }
-    if (bal !== null) prevBalance = bal;
+    // Clean narration: remove ref codes, currency lines, "INR/USD XXXX AT INRXX" lines
+    const narration = rawJoined
+      .replace(/\b(IMPS[-\s]\d{12,}|RTGS\s+\S+|NEFTIN\s+\S+|\d{4}IT\d{7,}|EBHVT\d{14,}|EBGPP\S{10,}|IBG\s+\S+|RTF\s+EBACT\S*)\b/gi, "")
+      .replace(/\b(USD|EUR|GBP|SGD|INR)\s+[\d,]+(\.\d+)?\s+(AT\s+INR[\d.]+)?/gi, "")
+      .replace(/\b(BatchId:\S+|REF[-\s]?\S+|AC\s+ENDING\s+\w+|ICIC\w+|CITI\w+|UTIB\w+|BOFA\w+|CBIN\w+|KMB\w*)\b/gi, "")
+      .replace(/\b26-\d{3}\b/g, "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^\s*TRANSFER\s*/i, "")
+      .trim();
 
-    // Skip rows with no amounts and no meaningful description
-    if (!debit && !credit && !txnAmt) return;
+    if (!debit && !credit) continue;
 
     rows.push([
       txn.transDate,
-      rawDesc || txn.descParts.join(" "),
+      narration || rawJoined.slice(0, 80),
       ref,
       debit,
       credit,
-      bal !== null ? bal.toFixed(2) : "",
+      bal.toFixed(2),
     ]);
-  });
+  }
 
   if (!rows.length) return null;
 
@@ -4716,7 +4848,57 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
             </Btn>
           </div>
           {testMsg && (
-            <p style={{ fontSize:11, marginTop:8, color:testResult==="ok"?T.green:T.red }}>{testMsg}</p>
+            <div style={{ marginTop:10, borderRadius:10, padding:"12px 14px",
+              background: testResult==="ok" ? T.greenDim : T.redDim,
+              border: `1px solid ${testResult==="ok" ? T.green+"44" : T.red+"44"}` }}>
+              {testResult === "ok" ? (
+                <p style={{ fontSize:12, color:T.green, fontWeight:600 }}>✓ {testMsg}</p>
+              ) : (
+                <>
+                  <p style={{ fontSize:12, color:T.red, fontWeight:700, marginBottom:8 }}>Connection Failed</p>
+                  {/* Detect the TDL Form:Company error specifically */}
+                  {(testMsg.includes("Form:Company") || testMsg.includes("No 'PARTS'") || testMsg.includes("TDL")) ? (
+                    <div>
+                      <p style={{ fontSize:11, color:T.text, fontWeight:600, marginBottom:6 }}>
+                        Root cause: The Chrome extension is sending a broken TDL request to Tally that triggers "Form:Company — No PARTS" error.
+                      </p>
+                      <p style={{ fontSize:11, color:T.textMid, marginBottom:8, lineHeight:1.6 }}>
+                        This happens when the extension intercepts the connection test and wraps it in its own TDL form definition that Tally cannot parse.
+                      </p>
+                      <div style={{ fontSize:11, color:T.textMid, lineHeight:1.8 }}>
+                        <strong style={{color:T.text}}>Fix options (try in order):</strong><br/>
+                        <strong style={{color:T.accent}}>1.</strong> Update the Bank2Tally Connector extension to the latest version<br/>
+                        <strong style={{color:T.accent}}>2.</strong> Disable the extension → use <strong>Download XML</strong> instead of Push to Tally<br/>
+                        <strong style={{color:T.accent}}>3.</strong> In Tally: press <strong>Escape</strong> to close any open dialog, then retry<br/>
+                        <strong style={{color:T.accent}}>4.</strong> In Tally Prime: F12 → Advanced Config → restart Gateway Server<br/>
+                        <strong style={{color:T.accent}}>5.</strong> Use <strong>Download XML</strong> and import manually: Tally → Gateway of Tally → Import Data → Vouchers
+                      </div>
+                    </div>
+                  ) : testMsg.includes("mixed-content") || testMsg.includes("Failed to fetch") ? (
+                    <div>
+                      <p style={{ fontSize:11, color:T.text, fontWeight:600, marginBottom:6 }}>
+                        Mixed-content block: Browser prevents HTTPS → HTTP (localhost) connections.
+                      </p>
+                      <div style={{ fontSize:11, color:T.textMid, lineHeight:1.8 }}>
+                        <strong style={{color:T.accent}}>Fix:</strong> Install the Bank2Tally Connector Chrome extension below — it acts as a local bridge to bypass this restriction.
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize:11, color:T.textMid, lineHeight:1.6, marginBottom:8 }}>{testMsg}</p>
+                      <div style={{ fontSize:11, color:T.textMid, lineHeight:1.8 }}>
+                        <strong style={{color:T.text}}>Checklist:</strong><br/>
+                        <strong style={{color:T.accent}}>1.</strong> Tally Prime is open and a company is loaded<br/>
+                        <strong style={{color:T.accent}}>2.</strong> F12 → Advanced Config → <strong>Enable Tally Gateway Server</strong> is ON<br/>
+                        <strong style={{color:T.accent}}>3.</strong> Port is set to <strong>{tallyPort}</strong> (same in Tally and above)<br/>
+                        <strong style={{color:T.accent}}>4.</strong> No firewall blocking localhost:{tallyPort}<br/>
+                        <strong style={{color:T.accent}}>5.</strong> Try <strong>Download XML</strong> as a workaround — import manually in Tally
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           )}
           {tally.status === "ok" && tally.companies.length > 0 && (
             <div style={{ marginTop:12, borderTop:`1px solid ${T.border}`, paddingTop:12 }}>
@@ -4731,7 +4913,14 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
               </div>
             </div>
           )}
-          <p style={{ fontSize:11, color:T.textDim, marginTop:10 }}>Tally Prime → F12 &gt; Advanced Config → Enable Tally Gateway on port {tallyPort}</p>
+          <p style={{ fontSize:11, color:T.textDim, marginTop:10 }}>
+            Tally Prime → F12 &gt; Advanced Config → Enable Tally Gateway on port {tallyPort}
+          </p>
+          {tally.status === "ok" && (
+            <p style={{ fontSize:10, marginTop:4, color:T.textSub }}>
+              Connection method: <strong style={{color:T.green}}>{_usedDirectFetch ? "Direct HTTP (fastest)" : "Chrome Extension bridge"}</strong>
+            </p>
+          )}
           {/* Extension status */}
           <ExtensionStatus />
         </Card>
@@ -5771,26 +5960,68 @@ function AppInner() {
     );
   };
 
-  const onImport = () => {
-    const companies = tally.companies.filter(c=>selectedCompanies.includes(c.id)).map(c=>c.name).join(", ") || selectedCompanies.join(", ");
+  const onImport = async () => {
+    const targetCos = tally.companies.filter(c=>selectedCompanies.includes(c.id));
+    const companyNames = targetCos.map(c=>c.name).join(", ") || selectedCompanies.join(", ");
     const validRows = rows.filter(r=>!r.isDuplicate||r.forceImport);
-    // History entry — rows_data capped at 500 rows to prevent localStorage bloat.
-    // For large statements only the first 500 rows are stored for re-import preview.
-    const rows_data_capped = rows.slice(0, 500);
+
+    // History entry (always saved regardless of push result)
     const entry = {
       id:genId(), filename, date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}),
-      rawDate:new Date().toISOString(), rows:validRows.length, company:companies, status:"Imported",
+      rawDate:new Date().toISOString(), rows:validRows.length, company:companyNames, status:"Imported",
       suspense:validRows.filter(r=>r.ledger==="Suspense Account").length,
       duplicates:rows.filter(r=>r.isDuplicate).length,
-      rows_data: rows_data_capped,
+      rows_data: rows.slice(0,500),
       rows_truncated: rows.length > 500,
     };
     setHistory(h => {
       const updated = [{ ...entry, savedAt: new Date().toISOString() }, ...h];
-      saveHistory(user.id, updated); // save per-user
+      saveHistory(user.id, updated);
       return updated;
     });
-    toast(`✓ ${validRows.length} vouchers pushed to Tally for ${companies}`,"success");
+
+    // If no companies selected or Tally offline — just save history and go to dashboard
+    if (!targetCos.length || tally.status !== "ok") {
+      toast(`${validRows.length} vouchers saved. ${tally.status!=="ok"?"Use Download XML to import manually into Tally.":""}`, "success");
+      setScreen(SCREENS.DASHBOARD);
+      setHeaders([]); setRawRows([]); setRows([]); setFilename(""); setAuditLog([]);
+      return;
+    }
+
+    // Push to each selected company
+    let successCount = 0; let failMsg = "";
+    for (const co of targetCos) {
+      const xml = toTallyXML(validRows, co);
+      try {
+        const result = await tallyPost(tally.host || "localhost", tally.port || "9000", xml, 30000);
+        // Tally returns LINEERROR or IMPORTERROR on failure
+        if (result && (result.includes("LINEERROR") || result.includes("IMPORTERROR"))) {
+          const errMatch = result.match(/<LINEERROR>([\s\S]*?)<\/LINEERROR>/i) ||
+                           result.match(/<IMPORTERROR>([\s\S]*?)<\/IMPORTERROR>/i);
+          failMsg = errMatch?.[1]?.trim() || "Tally import error";
+          toast(`Tally rejected import for ${co.name}: ${failMsg}`, "warn");
+        } else {
+          successCount++;
+        }
+      } catch(e) {
+        const isTDLError = e.message.includes("Form:Company") || e.message.includes("No 'PARTS'") || e.message.includes("TDL");
+        if (isTDLError) {
+          toast(
+            "Tally Extension Error: The extension sent a broken TDL request. " +
+            "Use 'Download XML' instead and import manually in Tally → Gateway of Tally → Import Data → Vouchers.",
+            "warn"
+          );
+        } else {
+          toast(`Push to ${co.name} failed: ${e.message}`, "warn");
+        }
+        break;
+      }
+    }
+
+    if (successCount > 0) {
+      toast(`✓ ${validRows.length} vouchers pushed to Tally for ${targetCos.slice(0,successCount).map(c=>c.name).join(", ")}`, "success");
+    }
+
     setScreen(SCREENS.DASHBOARD);
     setHeaders([]); setRawRows([]); setRows([]); setFilename(""); setAuditLog([]);
   };
