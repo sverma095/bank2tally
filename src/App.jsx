@@ -157,42 +157,42 @@ const sb = {
 
 // ── Design Tokens ────────────────────────────────────────────────
 const T = {
-  // Backgrounds — deep premium dark
-  bg:          "#070c19",
-  surface:     "#0d1424",
-  card:        "#111b2e",
-  cardHover:   "#162035",
-  // Borders — glassy, luminous
-  border:      "rgba(99,130,255,0.14)",
-  borderLight: "rgba(99,130,255,0.07)",
-  borderMid:   "rgba(99,130,255,0.22)",
-  // Accent — electric indigo
-  accent:      "#6366f1",
-  accentDim:   "rgba(99,102,241,0.15)",
-  accentGlow:  "rgba(99,102,241,0.30)",
-  accentSoft:  "rgba(99,102,241,0.07)",
-  // Semantic colours — vivid neon on dark
-  green:       "#10b981",
-  greenDim:    "rgba(16,185,129,0.13)",
-  greenMid:    "rgba(16,185,129,0.22)",
-  amber:       "#f59e0b",
-  amberDim:    "rgba(245,158,11,0.13)",
-  red:         "#f43f5e",
-  redDim:      "rgba(244,63,94,0.13)",
-  purple:      "#a78bfa",
-  purpleDim:   "rgba(167,139,250,0.13)",
-  gold:        "#fbbf24",
-  goldDim:     "rgba(251,191,36,0.13)",
-  teal:        "#22d3ee",
-  tealDim:     "rgba(34,211,238,0.13)",
-  // Text — crisp on dark
-  text:        "#f1f5f9",
-  textHigh:    "#ffffff",
-  textMid:     "#cbd5e1",
-  textSub:     "#94a3b8",
-  textDim:     "#64748b",
+  // Backgrounds — clean premium light
+  bg:          "#f0f4f9",
+  surface:     "#ffffff",
+  card:        "#ffffff",
+  cardHover:   "#f8fafd",
+  // Borders — soft, visible
+  border:      "#dde3ee",
+  borderLight: "#e8edf6",
+  borderMid:   "#c8d3e8",
+  // Accent blue — rich, professional
+  accent:      "#2563eb",
+  accentDim:   "#dbeafe",
+  accentGlow:  "rgba(37,99,235,0.15)",
+  accentSoft:  "rgba(37,99,235,0.06)",
+  // Semantic colours — vivid on light
+  green:       "#059669",
+  greenDim:    "#d1fae5",
+  greenMid:    "#a7f3d0",
+  amber:       "#d97706",
+  amberDim:    "#fef3c7",
+  red:         "#dc2626",
+  redDim:      "#fee2e2",
+  purple:      "#7c3aed",
+  purpleDim:   "#ede9fe",
+  gold:        "#b45309",
+  goldDim:     "#fef3c7",
+  teal:        "#0891b2",
+  tealDim:     "#cffafe",
+  // Text — strong contrast on white/light
+  text:        "#0f172a",
+  textHigh:    "#000000",
+  textMid:     "#334155",
+  textSub:     "#64748b",
+  textDim:     "#94a3b8",
   // Brand
-  font:        "'Outfit', 'DM Sans', 'Inter', sans-serif",
+  font:        "'DM Sans', 'Inter', 'Segoe UI', sans-serif",
   mono:        "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
 };
 
@@ -2428,83 +2428,31 @@ async function parseFile(file, onProgress) {
 
 // ── Styled Primitives ────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
   body { background: ${T.bg}; color: ${T.text}; font-family: ${T.font}; -webkit-font-smoothing: antialiased; }
-
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 99px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.5); }
-
-  select, input, textarea {
-    background: rgba(15,23,42,0.8);
-    color: ${T.text};
-    border: 1px solid ${T.border};
-    border-radius: 10px;
-    font-family: ${T.font};
-    font-size: 13px;
-    transition: all 0.2s;
-  }
-  select:focus, input:focus, textarea:focus {
-    outline: none;
-    border-color: ${T.accent};
-    box-shadow: 0 0 0 3px ${T.accentGlow}, 0 0 20px rgba(99,102,241,0.1);
-  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #e8edf6; }
+  ::-webkit-scrollbar-thumb { background: #c8d3e8; border-radius: 99px; }
+  select, input, textarea { background: ${T.surface}; color: ${T.text}; border: 1px solid ${T.border}; border-radius: 8px; font-family: ${T.font}; font-size: 13px; transition: border-color 0.15s; }
+  select:focus, input:focus, textarea:focus { outline: none; border-color: ${T.accent}; box-shadow: 0 0 0 3px ${T.accentGlow}; }
   input::placeholder { color: ${T.textDim}; }
-  select option { background: #111b2e; color: ${T.text}; }
-
-  @keyframes fadeIn    { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
-  @keyframes fadeInFast{ from { opacity:0; transform:translateY(4px)  } to { opacity:1; transform:translateY(0) } }
-  @keyframes shimmer   { from { background-position:-200% 0 } to { background-position:200% 0 } }
-  @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes fadeIn    { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes fadeInFast{ from { opacity:0; transform:translateY(4px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes shimmer   { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+  @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:0.5} }
   @keyframes slideIn   { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-  @keyframes glow      { 0%,100%{box-shadow:0 0 20px rgba(99,102,241,0.2)} 50%{box-shadow:0 0 40px rgba(99,102,241,0.5)} }
-  @keyframes orbit     { from{transform:rotate(0deg) translateX(28px) rotate(0deg)} to{transform:rotate(360deg) translateX(28px) rotate(-360deg)} }
-  @keyframes float     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-  @keyframes scanline  { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
-
-  .fade-in    { animation: fadeIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
-  .fade-fast  { animation: fadeInFast 0.2s ease forwards; }
-
-  .row-hover:hover {
-    background: rgba(99,102,241,0.06) !important;
-    border-color: rgba(99,102,241,0.2) !important;
-  }
-  .btn-hover:hover { transform: translateY(-1px); filter: brightness(1.08); }
+  .fade-in  { animation: fadeIn 0.3s ease forwards; }
+  .fade-fast{ animation: fadeInFast 0.2s ease forwards; }
+  .row-hover:hover { background: #f0f4f9 !important; }
+  .btn-hover:hover { filter: brightness(0.95); transform: translateY(-1px); }
   .btn-hover:active { transform: translateY(0); }
-
-  .card-hover:hover {
-    border-color: rgba(99,102,241,0.35) !important;
-    box-shadow: 0 0 0 1px rgba(99,102,241,0.15), 0 8px 32px rgba(0,0,0,0.4), 0 0 60px rgba(99,102,241,0.06) !important;
-    transform: translateY(-1px);
-  }
-
-  .glass {
-    background: rgba(17,27,46,0.7);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(99,130,255,0.14);
-  }
-
-  .glow-text {
-    text-shadow: 0 0 30px rgba(99,102,241,0.6), 0 0 60px rgba(99,102,241,0.3);
-  }
-
-  .noise-bg::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none;
-    border-radius: inherit;
-  }
-`;
+  .card-hover:hover { border-color: ${T.accent} !important; box-shadow: 0 0 0 3px ${T.accentGlow}; }
+`
 
 function Pill({ children, color = "gray", size = "sm", dot = false, style:extra={} }) {
   const map = {
-    gray:   [T.textDim,  "rgba(100,116,139,0.12)"],
+    gray:   [T.textDim,  T.surface],
     blue:   [T.accent,   T.accentDim],
     green:  [T.green,    T.greenDim],
     amber:  [T.amber,    T.amberDim],
@@ -2513,8 +2461,8 @@ function Pill({ children, color = "gray", size = "sm", dot = false, style:extra=
   };
   const [col, bg] = map[color] || map.gray;
   return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:bg, color:col, fontSize:size==="xs"?10:11, fontWeight:600, padding:size==="xs"?"2px 8px":"3px 10px", borderRadius:99, letterSpacing:"0.03em", border:`1px solid ${col}33`, boxShadow:`0 0 8px ${col}22`, ...extra }}>
-      {dot && <span style={{width:5,height:5,borderRadius:"50%",background:col,flexShrink:0,boxShadow:`0 0 6px ${col}`}}/>}
+    <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:bg, color:col, fontSize:size==="xs"?10:11, fontWeight:600, padding:size==="xs"?"2px 7px":"3px 9px", borderRadius:99, letterSpacing:"0.02em", border:`1px solid ${col}22`, ...extra }}>
+      {dot && <span style={{width:5,height:5,borderRadius:"50%",background:col,flexShrink:0}}/>}
       {children}
     </span>
   );
@@ -2523,13 +2471,13 @@ function Pill({ children, color = "gray", size = "sm", dot = false, style:extra=
 function Btn({ children, onClick, variant="primary", disabled, icon, size="md", fullWidth, style:extra={} }) {
   const sz = size==="sm" ? { padding:"5px 13px", fontSize:12 } : size==="lg" ? { padding:"12px 24px", fontSize:15 } : { padding:"9px 17px", fontSize:13 };
   const vars = {
-    primary:   { background:`linear-gradient(135deg, #6366f1, #8b5cf6)`, color:"#fff", border:"none", boxShadow:`0 4px 24px rgba(99,102,241,0.4), inset 0 1px 0 rgba(255,255,255,0.15)` },
-    secondary: { background:"rgba(255,255,255,0.05)", color:T.text, border:`1px solid ${T.border}`, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.04)" },
-    outline:   { background:"transparent", color:T.accent, border:`1px solid rgba(99,102,241,0.5)`, boxShadow:`0 0 16px rgba(99,102,241,0.1)` },
-    ghost:     { background:"transparent", color:T.textMid, border:"none" },
-    danger:    { background:"rgba(244,63,94,0.1)", color:T.red, border:`1px solid rgba(244,63,94,0.3)` },
-    success:   { background:"rgba(16,185,129,0.1)", color:T.green, border:`1px solid rgba(16,185,129,0.3)` },
-    amber:     { background:"rgba(245,158,11,0.1)", color:T.amber, border:`1px solid rgba(245,158,11,0.3)` },
+    primary: { background:`linear-gradient(135deg, ${T.accent}, #1d4ed8)`, color:"#fff", border:"none", boxShadow:`0 2px 12px ${T.accentGlow}` },
+    secondary: { background:T.card, color:T.text, border:`1px solid ${T.border}` },
+    outline: { background:"transparent", color:T.accent, border:`1px solid ${T.accent}` },
+    ghost: { background:"transparent", color:T.textMid, border:"none" },
+    danger: { background:T.redDim, color:T.red, border:`1px solid ${T.red}44` },
+    success: { background:T.greenDim, color:T.green, border:`1px solid ${T.green}44` },
+    amber: { background:T.amberDim, color:T.amber, border:`1px solid ${T.amber}44` },
   };
   return (
     <button onClick={onClick} disabled={disabled} className="btn-hover"
@@ -2540,49 +2488,39 @@ function Btn({ children, onClick, variant="primary", disabled, icon, size="md", 
   );
 }
 
-function Card({ children, style:extra={}, className="", glow=false }) {
-  return (
-    <div className={className} style={{
-      background: "linear-gradient(145deg, rgba(17,27,46,0.95), rgba(13,20,36,0.95))",
-      border: `1px solid ${T.border}`,
-      borderRadius: 16,
-      padding: 20,
-      boxShadow: glow
-        ? `0 4px 24px rgba(0,0,0,0.4), 0 0 60px rgba(99,102,241,0.08), inset 0 1px 0 rgba(255,255,255,0.04)`
-        : `0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)`,
-      backdropFilter: "blur(20px)",
-      position: "relative",
-      overflow: "hidden",
-      ...extra
-    }}>
-      <div style={{ position:"absolute", inset:0, background:"linear-gradient(135deg, rgba(99,102,241,0.03) 0%, transparent 60%)", pointerEvents:"none", borderRadius:"inherit" }} />
-      <div style={{ position:"relative" }}>{children}</div>
-    </div>
-  );
+function Card({ children, style:extra={}, className="" }) {
+  return <div className={className} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:14, padding:20, boxShadow:"0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)", ...extra }}>{children}</div>;
 }
 
 function Input({ value, onChange, placeholder, prefix, suffix, style:extra={}, type, maxLength, onKeyDown, id }) {
   return (
     <div style={{ position:"relative", display:"flex", alignItems:"center" }}>
-      {prefix && <span style={{ position:"absolute", left:11, color:T.textSub, fontSize:14, zIndex:1, pointerEvents:"none" }}>{prefix}</span>}
-      <input
-        id={id} value={value} onChange={onChange} placeholder={placeholder}
-        type={type} maxLength={maxLength} onKeyDown={onKeyDown}
-        style={{
-          width:"100%",
-          padding:"10px 14px",
-          paddingLeft: prefix ? 34 : 14,
-          paddingRight: suffix ? 34 : 14,
-          background: "rgba(7,12,25,0.6)",
-          border: "1px solid rgba(99,130,255,0.18)",
-          borderRadius: 10,
-          color: T.text,
-          fontSize: 13,
-          fontFamily: T.font,
-          transition: "all 0.2s",
-          ...extra
-        }} />
-      {suffix && <span style={{ position:"absolute", right:11, color:T.textSub, fontSize:13, zIndex:1, pointerEvents:"none" }}>{suffix}</span>}
+      {prefix && <span style={{ position:"absolute", left:10, color:T.textDim, fontSize:13, zIndex:1, pointerEvents:"none" }}>{prefix}</span>}
+      <input id={id} value={value} onChange={onChange} placeholder={placeholder} type={type} maxLength={maxLength} onKeyDown={onKeyDown}
+        style={{ width:"100%", padding:"8px 12px", paddingLeft:prefix?32:12, paddingRight:suffix?32:12, ...extra }} />
+      {suffix && <span style={{ position:"absolute", right:10, color:T.textDim, fontSize:13, zIndex:1, pointerEvents:"none" }}>{suffix}</span>}
+    </div>
+  );
+}
+
+function PasswordStrengthBar({ password }) {
+  const checks = [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[0-9]/.test(password),
+    /[^A-Za-z0-9]/.test(password),
+  ];
+  const score = checks.filter(Boolean).length;
+  const color = score <= 1 ? T.red : score === 2 ? T.amber : score === 3 ? "#d97706" : T.green;
+  const label = ["Too short", "Weak", "Fair", "Good", "Strong"][score];
+  return (
+    <div style={{ marginTop:10 }}>
+      <div style={{ display:"flex", gap:3, marginBottom:4 }}>
+        {checks.map((ok, i) => (
+          <div key={i} style={{ flex:1, height:3, borderRadius:2, background: ok ? color : T.borderLight, transition:"background 0.2s" }} />
+        ))}
+      </div>
+      <p style={{ fontSize:11, color }}>{label}</p>
     </div>
   );
 }
@@ -2590,17 +2528,11 @@ function Input({ value, onChange, placeholder, prefix, suffix, style:extra={}, t
 function Modal({ open, onClose, title, children, width=540 }) {
   if (!open) return null;
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(2,6,18,0.75)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)" }} onClick={onClose}>
-      <div className="fade-in" style={{
-        background: "linear-gradient(145deg, #111b2e, #0d1424)",
-        border: "1px solid rgba(99,130,255,0.2)",
-        borderRadius: 20,
-        width, maxWidth:"95vw", maxHeight:"85vh", overflow:"auto", padding:28,
-        boxShadow: "0 25px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.1), inset 0 1px 0 rgba(255,255,255,0.05)"
-      }} onClick={e=>e.stopPropagation()}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
-          <span style={{ fontWeight:700, fontSize:16, color:T.text, letterSpacing:"-0.3px" }}>{title}</span>
-          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, color:T.textSub, cursor:"pointer", fontSize:16, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.15s" }}>×</button>
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.45)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }} onClick={onClose}>
+      <div className="fade-in" style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:18, width, maxWidth:"95vw", maxHeight:"85vh", overflow:"auto", padding:28 }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <span style={{ fontWeight:700, fontSize:16, color:T.text }}>{title}</span>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:T.textMid, cursor:"pointer", fontSize:20, lineHeight:1 }}>×</button>
         </div>
         {children}
       </div>
@@ -2609,51 +2541,37 @@ function Modal({ open, onClose, title, children, width=540 }) {
 }
 
 function Toast({ toasts }) {
-  const colors = { error: T.red, warn: T.amber, success: T.green, info: T.accent };
   return (
-    <div style={{ position:"fixed", top:20, right:20, zIndex:9999, display:"flex", flexDirection:"column", gap:10 }}>
-      {toasts.map(t => {
-        const col = colors[t.type] || T.green;
-        return (
-          <div key={t.id} className="fade-in"
-            style={{
-              background: "linear-gradient(135deg, rgba(13,20,36,0.97), rgba(17,27,46,0.97))",
-              border: `1px solid ${col}44`,
-              borderLeft: `3px solid ${col}`,
-              borderRadius: 12, padding:"13px 18px",
-              fontSize: 13, maxWidth:380,
-              display:"flex", alignItems:"center", gap:10,
-              boxShadow: `0 8px 40px rgba(0,0,0,0.6), 0 0 20px ${col}22`,
-              backdropFilter: "blur(20px)"
-            }}>
-            <span style={{ fontSize:16, flexShrink:0 }}>{t.type==="error"?"✕":t.type==="warn"?"⚠":"✓"}</span>
-            <span style={{ color:T.textMid }}>{t.msg}</span>
-          </div>
-        );
-      })}
+    <div style={{ position:"fixed", top:20, right:20, zIndex:9999, display:"flex", flexDirection:"column", gap:8 }}>
+      {toasts.map(t => (
+        <div key={t.id} className="fade-in"
+          style={{ background:T.card, border:`1px solid ${t.type==="error"?T.red:t.type==="warn"?T.amber:T.green}55`, borderRadius:11, padding:"12px 18px", fontSize:13, color:t.type==="error"?T.red:t.type==="warn"?T.amber:T.green, boxShadow:`0 8px 32px rgba(0,0,0,0.4)`, maxWidth:380, display:"flex", alignItems:"center", gap:8 }}>
+          <span>{t.type==="error"?"✕":t.type==="warn"?"⚠":"✓"}</span>
+          <span style={{ color:T.text }}>{t.msg}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
 function Steps({ steps, current }) {
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:0, marginBottom:28, background:"rgba(99,102,241,0.04)", border:"1px solid rgba(99,102,241,0.1)", borderRadius:14, padding:"12px 20px" }}>
+    <div style={{ display:"flex", alignItems:"center", gap:0, marginBottom:24 }}>
       {steps.map((s, i) => (
         <div key={i} style={{ display:"flex", alignItems:"center", flex: i < steps.length-1 ? 1 : "none" }}>
           <div style={{ display:"flex", alignItems:"center", gap:9 }}>
             <div style={{
               width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0, transition:"all 0.3s",
-              background: i < current ? `linear-gradient(135deg, ${T.green}, #34d399)` : i === current ? `linear-gradient(135deg, #6366f1, #8b5cf6)` : "rgba(255,255,255,0.05)",
+              background: i < current ? T.green : i === current ? T.accent : T.border,
               color: i <= current ? "#fff" : T.textDim,
-              boxShadow: i === current ? `0 0 20px rgba(99,102,241,0.5)` : i < current ? `0 0 12px rgba(16,185,129,0.4)` : "none",
-              border: i > current ? "1px solid rgba(99,130,255,0.15)" : "none",
+              boxShadow: i === current ? `0 0 16px ${T.accentGlow}` : "none",
             }}>
               {i < current ? "✓" : i+1}
             </div>
-            <span style={{ fontSize:12, fontWeight:i===current?700:400, color:i===current?T.text:i<current?T.textMid:T.textDim, whiteSpace:"nowrap", transition:"all 0.3s" }}>{s}</span>
+            <span style={{ fontSize:12, fontWeight:i===current?600:400, color:i===current?T.text:T.textDim, whiteSpace:"nowrap" }}>{s}</span>
           </div>
           {i < steps.length-1 && (
-            <div style={{ flex:1, height:1, background: i < current ? `linear-gradient(90deg, rgba(16,185,129,0.6), rgba(16,185,129,0.3))` : "rgba(99,130,255,0.1)", margin:"0 12px", transition:"all 0.5s", borderRadius:1 }} />
+            <div style={{ flex:1, height:1, background:`linear-gradient(90deg, ${i < current ? T.green : T.border}, ${i+1 <= current ? T.green : T.border})`, margin:"0 10px", transition:"background 0.5s" }} />
           )}
         </div>
       ))}
@@ -2663,15 +2581,10 @@ function Steps({ steps, current }) {
 
 function StatCard({ icon, label, value, sub, color=T.accent }) {
   return (
-    <Card style={{ padding:"20px 22px", overflow:"hidden" }}>
-      <div style={{ position:"absolute", top:-16, right:-16, width:80, height:80, borderRadius:"50%", background:`radial-gradient(circle, ${color}18, transparent 70%)`, pointerEvents:"none" }} />
-      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:12 }}>
-        <div style={{ width:40, height:40, borderRadius:12, background:`${color}18`, border:`1px solid ${color}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{icon}</div>
-      </div>
-      <div style={{ fontSize:28, fontWeight:800, color, letterSpacing:"-1px", marginBottom:3, lineHeight:1 }}>{value}</div>
+    <Card style={{ padding:"18px 20px", position:"relative", overflow:"hidden", borderLeft:`3px solid ${color}` }}>
+      <div style={{ fontSize:24, fontWeight:800, color, letterSpacing:"-0.5px", marginBottom:4 }}>{value}</div>
       <div style={{ fontSize:12, fontWeight:600, color:T.text, marginBottom:2 }}>{label}</div>
-      {sub && <div style={{ fontSize:11, color:T.textDim, marginTop:1 }}>{sub}</div>}
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:2, background:`linear-gradient(90deg, ${color}60, transparent)`, borderRadius:"0 0 16px 16px" }} />
+      {sub && <div style={{ fontSize:11, color:T.textSub, marginTop:2 }}>{sub}</div>}
     </Card>
   );
 }
@@ -2679,7 +2592,7 @@ function StatCard({ icon, label, value, sub, color=T.accent }) {
 // ── ERR Card ─────────────────────────────────────────────────────
 function ErrCard({ code, message, onDismiss }) {
   return (
-    <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:14, padding:"14px 18px", marginBottom:16 }} className="fade-in">
+    <div style={{ background:T.redDim, border:`1px solid ${T.red}55`, borderRadius:12, padding:"14px 18px", marginBottom:16 }} className="fade-in">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
         <div style={{ flex:1 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
@@ -2963,7 +2876,10 @@ function LoginScreen({ onLogin }) {
       const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON },
-        body: JSON.stringify({ email: forgotEmail }),
+        body: JSON.stringify({
+          email: forgotEmail,
+          redirectTo: window.location.origin + window.location.pathname,
+        }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -2977,12 +2893,12 @@ function LoginScreen({ onLogin }) {
   // ── Password recovery screen (after clicking email reset link) ──
   if (recoveryToken) {
     return (
-      <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 30% 60%, rgba(99,102,241,0.1) 0%, transparent 55%), #070c19", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
-        <div style={{ position:"absolute", inset:0, pointerEvents:"none" }} />
+      <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
+        <div style={{ position:"absolute", inset:0, backgroundImage:`radial-gradient(ellipse at 30% 60%, ${T.accentDim}44 0%, transparent 55%)`, pointerEvents:"none" }} />
         <div className="fade-in" style={{ width:440, position:"relative" }}>
           <div style={{ textAlign:"center", marginBottom:24 }}>
-            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #6366f1, #8b5cf6, #a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, margin:"0 auto 14px", boxShadow:"0 0 50px rgba(99,102,241,0.3)" }}>🔑</div>
-            <h1 style={{ fontSize:24, fontWeight:900, letterSpacing:"-0.5px", marginBottom:4, background:"linear-gradient(135deg, #818cf8 40%, #c084fc)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Set New Password</h1>
+            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1d4ed8, #2563eb, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:36, margin:"0 auto 14px", boxShadow:"0 0 40px rgba(37,99,235,0.20)" }}>🔑</div>
+            <h1 style={{ fontSize:24, fontWeight:900, letterSpacing:"-0.5px", marginBottom:4, background:"linear-gradient(135deg, #1d4ed8 40%, #7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Set New Password</h1>
             <p style={{ color:T.textMid, fontSize:13 }}>Choose a strong new password for your account.</p>
           </div>
           <Card style={{ padding:28 }}>
@@ -3020,8 +2936,8 @@ function LoginScreen({ onLogin }) {
   // ── Pending screen ───────────────────────────────────────────────
   if (pendingUser) {
     return (
-      <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 30% 60%, rgba(245,158,11,0.07) 0%, transparent 55%), #070c19", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
-        <div style={{ position:"absolute", inset:0, pointerEvents:"none" }} />
+      <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
+        <div style={{ position:"absolute", inset:0, backgroundImage:`radial-gradient(ellipse at 30% 60%, ${T.amberDim}44 0%, transparent 55%)`, pointerEvents:"none" }} />
         <div className="fade-in" style={{ width:460, position:"relative", textAlign:"center" }}>
           <div style={{ width:72, height:72, borderRadius:"50%", background:T.amberDim, border:`2px solid ${T.amber}55`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, margin:"0 auto 20px" }}>⏳</div>
           <h2 style={{ fontSize:22, fontWeight:700, color:T.text, marginBottom:8 }}>Awaiting Approval</h2>
@@ -3051,14 +2967,14 @@ function LoginScreen({ onLogin }) {
   }
 
   return (
-    <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at 30% 20%, rgba(99,102,241,0.12) 0%, transparent 55%), radial-gradient(ellipse at 80% 80%, rgba(167,139,250,0.08) 0%, transparent 50%), #070c19", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
-      <div style={{ position:"absolute", inset:0, backgroundImage:"linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px)", backgroundSize:"60px 60px", pointerEvents:"none" }} />
+    <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
+      <div style={{ position:"absolute", inset:0, backgroundImage:`radial-gradient(ellipse at 20% 50%, ${T.accentDim}55 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, ${T.purpleDim}44 0%, transparent 50%)`, pointerEvents:"none" }} />
       <div className="fade-in" style={{ width:440, position:"relative" }}>
         {/* Logo */}
         {/* ── Brand Header ── */}
         <div style={{ textAlign:"center", marginBottom:24 }}>
           <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
-            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #6366f1, #8b5cf6, #a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 0 1px rgba(99,102,241,0.3), 0 0 50px rgba(99,102,241,0.25), 0 8px 32px rgba(0,0,0,0.4)" }}>
+            <div style={{ width:76, height:76, borderRadius:22, background:"linear-gradient(145deg, #1d4ed8, #2563eb, #7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 0 1px rgba(37,99,235,0.2), 0 0 40px rgba(37,99,235,0.15), 0 8px 24px rgba(0,0,0,0.12)" }}>
                 <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="4" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
                   <rect x="10" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
@@ -3070,17 +2986,17 @@ function LoginScreen({ onLogin }) {
                 </svg>
               </div>
           </div>
-          <h1 style={{ fontSize:30, fontWeight:900, letterSpacing:"-1.5px", marginBottom:4, background:"linear-gradient(135deg, #818cf8 0%, #c084fc 60%, #f0abfc 100%)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</h1>
-          <p style={{ color:T.textDim, fontSize:11, letterSpacing:"0.15em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>Professional Bank Statement Importer</p>
-          <div style={{ background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.12)", borderRadius:12, padding:"10px 16px", textAlign:"left" }}>
-            <p style={{ fontSize:11.5, color:T.textSub, lineHeight:1.7, fontStyle:"italic", marginBottom:4 }}>"{todayQuote.text}"</p>
-            <p style={{ fontSize:10, color:T.textDim, fontWeight:600, letterSpacing:"0.05em" }}>— {todayQuote.author}</p>
+          <h1 style={{ fontSize:28, fontWeight:900, letterSpacing:"-1px", marginBottom:3, background:"linear-gradient(135deg, #1d4ed8 40%, #7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Bank2Tally</h1>
+          <p style={{ color:T.textMid, fontSize:11, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>Professional Bank Statement Importer</p>
+          <div style={{ background:`linear-gradient(135deg, rgba(61,127,255,0.08), rgba(180,124,255,0.08))`, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 14px", textAlign:"left" }}>
+            <p style={{ fontSize:12, color:T.textMid, lineHeight:1.65, fontStyle:"italic", marginBottom:4 }}>"{todayQuote.text}"</p>
+            <p style={{ fontSize:10, color:T.textSub, fontWeight:600 }}>— {todayQuote.author}</p>
           </div>
         </div>
 
         {/* Tab switcher - only show when not on forgot */}
         {tab !== "forgot" && (
-          <div style={{ display:"flex", background:"rgba(255,255,255,0.04)", borderRadius:11, padding:4, marginBottom:20, border:`1px solid ${T.border}` }}>
+          <div style={{ display:"flex", background:T.surface, borderRadius:11, padding:4, marginBottom:20, border:`1px solid ${T.border}` }}>
             {[["login","Sign In"],["register","Request Access"]].map(([t,label]) => (
               <button key={t} onClick={()=>{setTab(t);setErr("");setSuccess("");}}
                 style={{ flex:1, padding:"8px 0", borderRadius:8, border:"none", cursor:"pointer", fontFamily:T.font, fontSize:13, fontWeight:tab===t?600:400, transition:"all 0.2s",
@@ -3094,13 +3010,13 @@ function LoginScreen({ onLogin }) {
 
         <Card style={{ padding:28 }}>
           {err && (
-            <div style={{ background:"rgba(244,63,94,0.1)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:10, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
-              <span>✕</span> {err}
+            <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:16 }}>
+              ✕ {err}
             </div>
           )}
           {success && (
-            <div style={{ background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.25)", borderRadius:10, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
-              <span>✓</span> {success}
+            <div style={{ background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:16 }}>
+              ✓ {success}
             </div>
           )}
 
@@ -3149,7 +3065,7 @@ function LoginScreen({ onLogin }) {
                 <p style={{ fontSize:14, fontWeight:700, color:T.accent, marginBottom:16 }}>
                   {pendingReg?.email}
                 </p>
-                <div style={{ background:"rgba(255,255,255,0.04)", border:`1px solid ${T.border}`, borderRadius:10, padding:"14px 16px", textAlign:"left", marginBottom:20 }}>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:10, padding:"14px 16px", textAlign:"left", marginBottom:20 }}>
                   <p style={{ fontSize:12, color:T.textMid, lineHeight:1.8 }}>
                     1. Open your email inbox<br/>
                     2. Click the <strong style={{color:T.text}}>verification link</strong> from Bank2Tally<br/>
@@ -3230,7 +3146,7 @@ function LoginScreen({ onLogin }) {
               svtiger543939@gmail.com
             </a>
           </div>
-          <p style={{ fontSize:10, color:T.textDim, marginTop:10, letterSpacing:"0.06em", fontWeight:500 }}>v2.0 · Tally ERP 9 & Prime · Made in India 🇮🇳</p>
+          <p style={{ fontSize:10, color:T.textDim, marginTop:10, letterSpacing:"0.04em" }}>v2.0 Commercial · Tally ERP 9 &amp; Prime Compatible</p>
         </div>
       </div>
     </div>
@@ -3361,8 +3277,8 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
           <div>
-            <h2 style={{ fontSize:24, fontWeight:900, letterSpacing:"-0.8px", color:T.textHigh }}>Dashboard</h2>
-            <p style={{ color:T.textSub, fontSize:13, marginTop:3 }}>Welcome back, <strong style={{color:T.accent}}>{user?.name?.split(" ")[0]}</strong> 👋</p>
+            <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.6px", color:T.text }}>Dashboard</h2>
+            <p style={{ color:T.textMid, fontSize:13, marginTop:3 }}>Welcome back, <strong style={{color:T.text}}>{user?.name?.split(" ")[0]}</strong> 👋</p>
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -3381,12 +3297,11 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       </div>
 
       {/* Daily Motivation */}
-      <div style={{ background:"linear-gradient(135deg, rgba(99,102,241,0.08), rgba(167,139,250,0.04))", border:"1px solid rgba(99,102,241,0.12)", borderRadius:14, padding:"14px 20px", marginBottom:22, display:"flex", alignItems:"center", gap:16, position:"relative", overflow:"hidden", zIndex:0 }}>
-        <div style={{ position:"absolute", right:-20, top:-20, width:80, height:80, borderRadius:"50%", background:"radial-gradient(circle, rgba(99,102,241,0.15), transparent)", pointerEvents:"none" }} />
-        <div style={{ width:3, alignSelf:"stretch", borderRadius:2, background:"linear-gradient(180deg,#6366f1,#a78bfa)", flexShrink:0 }} />
+      <div style={{ background:"rgba(37,99,235,0.04)", border:"1px solid rgba(37,99,235,0.14)", borderRadius:12, padding:"12px 18px", marginBottom:18, display:"flex", alignItems:"center", gap:14 }}>
+        <div style={{ width:3, alignSelf:"stretch", borderRadius:2, background:T.accent, flexShrink:0 }} />
         <div>
-          <p style={{ fontSize:12.5, color:T.textMid, lineHeight:1.65, fontStyle:"italic", marginBottom:3 }}>"{todayQuote.text}"</p>
-          <p style={{ fontSize:10, color:T.textDim, fontWeight:600, letterSpacing:"0.05em" }}>— {todayQuote.author}</p>
+          <p style={{ fontSize:12, color:T.textMid, lineHeight:1.6, fontStyle:"italic", marginBottom:2 }}>"{todayQuote.text}"</p>
+          <p style={{ fontSize:10, color:T.textSub, fontWeight:600 }}>— {todayQuote.author}</p>
         </div>
       </div>
 
@@ -3400,7 +3315,7 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       {/* Recent activity */}
       <Card>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <span style={{ fontWeight:700, fontSize:14, color:T.text, letterSpacing:"-0.2px" }}>Recent Imports</span>
+          <span style={{ fontWeight:600, fontSize:14 }}>Recent Imports</span>
           <Btn size="sm" variant="ghost" onClick={()=>setScreen(SCREENS.HISTORY)}>View all →</Btn>
         </div>
         {history.length === 0 ? (
@@ -4677,6 +4592,14 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
   const [profErr, setProfErr]       = useState("");
   const [profOk, setProfOk]         = useState("");
 
+  // ── Change Password state ────────────────────────────────
+  const [cpOldPass,  setCpOldPass]  = useState("");
+  const [cpNewPass,  setCpNewPass]  = useState("");
+  const [cpNewPass2, setCpNewPass2] = useState("");
+  const [cpSaving,   setCpSaving]   = useState(false);
+  const [cpErr,      setCpErr]      = useState("");
+  const [cpOk,       setCpOk]       = useState("");
+
   // ── Mobile OTP state ─────────────────────────────────────────
   const [otpSent, setOtpSent]         = useState(false);
   const [otpValue, setOtpValue]       = useState("");
@@ -4711,6 +4634,45 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
       setTimeout(()=>setProfOk(""),3000);
     } catch(e) { setProfErr("Save failed: "+e.message); }
     setProfSaving(false);
+  };
+
+  // ── Change Password (verify old pass first, then update) ────────
+  const handleChangePassword = async () => {
+    setCpErr(""); setCpOk("");
+    if (!cpOldPass)            return setCpErr("Enter your current password.");
+    if (cpNewPass.length < 8)  return setCpErr("New password must be at least 8 characters.");
+    if (cpNewPass !== cpNewPass2) return setCpErr("New passwords do not match.");
+    if (cpNewPass === cpOldPass)  return setCpErr("New password must differ from current.");
+    setCpSaving(true);
+    try {
+      // Step 1: Re-authenticate with old password to verify it
+      const signInRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON },
+        body: JSON.stringify({ email: user.email, password: cpOldPass }),
+      });
+      const signInData = await signInRes.json();
+      if (!signInRes.ok || signInData.error) {
+        throw new Error("Current password is incorrect.");
+      }
+      // Step 2: Update to new password using the verified token
+      const updateRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON,
+          "Authorization": `Bearer ${signInData.access_token}`,
+        },
+        body: JSON.stringify({ password: cpNewPass }),
+      });
+      const updateData = await updateRes.json();
+      if (!updateRes.ok || updateData.error) {
+        throw new Error(updateData.message || updateData.error_description || "Password update failed.");
+      }
+      setCpOk("Password changed successfully!");
+      setCpOldPass(""); setCpNewPass(""); setCpNewPass2("");
+    } catch (e) { setCpErr(e.message); }
+    setCpSaving(false);
   };
 
   // ── Send OTP via Email (free — no SMS charges) ────────────────
@@ -4805,13 +4767,13 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
   return (
     <div className="fade-in">
-      <h2 style={{ fontSize:22, fontWeight:900, letterSpacing:"-0.6px", color:T.textHigh, marginBottom:22 }}>Settings</h2>
+      <h2 style={{ fontSize:20, fontWeight:700, color:T.text, marginBottom:20 }}>Settings</h2>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
         {/* Profile Card */}
         <Card style={{ gridColumn:"1 / -1" }}>
           {/* Profile header */}
-          <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:22, padding:"18px 20px", borderRadius:14, background:"linear-gradient(135deg, rgba(99,102,241,0.12), rgba(167,139,250,0.06))", border:"1px solid rgba(99,102,241,0.2)" }}>
-            <div style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:"0 4px 24px rgba(99,102,241,0.5)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:22, padding:"16px 18px", borderRadius:12, background:`linear-gradient(135deg, ${T.accentDim}88, ${T.surface})`, border:`1px solid ${T.accent}22` }}>
+            <div style={{ width:64, height:64, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:`0 4px 20px ${T.accent}55` }}>
               {(profForm.name||user?.name||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{ flex:1, minWidth:0 }}>
@@ -4935,6 +4897,59 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
           <Btn variant="primary" onClick={saveProfile} disabled={profSaving} icon={profSaving?"⏳":"💾"}>
             {profSaving ? "Saving…" : "Save Profile"}
           </Btn>
+        </Card>
+
+        {/* Change Password */}
+        <Card>
+          <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
+            🔐 <span>Change Password</span>
+          </div>
+
+          {cpErr && (
+            <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:14 }}>
+              ✕ {cpErr}
+            </div>
+          )}
+          {cpOk && (
+            <div style={{ background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:14 }}>
+              ✓ {cpOk}
+            </div>
+          )}
+
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>Current Password</label>
+              <Input type="password" value={cpOldPass}
+                onChange={e => { setCpOldPass(e.target.value); setCpErr(""); setCpOk(""); }}
+                placeholder="Enter your current password" prefix="🔑" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>New Password</label>
+              <Input type="password" value={cpNewPass}
+                onChange={e => { setCpNewPass(e.target.value); setCpErr(""); setCpOk(""); }}
+                placeholder="Minimum 8 characters" prefix="🔒" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>Confirm New Password</label>
+              <Input type="password" value={cpNewPass2}
+                onChange={e => { setCpNewPass2(e.target.value); setCpErr(""); setCpOk(""); }}
+                placeholder="Re-enter new password" prefix="🔒"
+                onKeyDown={e => e.key === "Enter" && handleChangePassword()} />
+            </div>
+          </div>
+
+          {/* Strength bar */}
+          {cpNewPass.length > 0 && (
+            <PasswordStrengthBar password={cpNewPass} />
+          )}
+
+          <div style={{ marginTop:16 }}>
+            <Btn variant="primary" fullWidth icon={cpSaving ? "⟳" : "🔐"}
+              disabled={cpSaving || !cpOldPass || cpNewPass.length < 8 || cpNewPass !== cpNewPass2}
+              onClick={handleChangePassword}>
+              {cpSaving ? "Changing Password…" : "Change Password"}
+            </Btn>
+          </div>
         </Card>
 
         {/* Tally connection */}
@@ -6180,12 +6195,12 @@ function AppInner() {
       <style>{css}</style>
       <Toast toasts={toasts} />
 
-      <div style={{ display:"flex", minHeight:"100vh", background:"radial-gradient(ellipse at 20% 10%, rgba(99,102,241,0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 90%, rgba(167,139,250,0.05) 0%, transparent 50%), #070c19", fontFamily:T.font }}>
+      <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:T.font }}>
         {/* Sidebar */}
-        <div style={{ width:224, background:"linear-gradient(180deg, #0d1528 0%, #0a1120 100%)", borderRight:"1px solid rgba(99,130,255,0.1)", padding:"20px 0", display:"flex", flexDirection:"column", flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100, boxShadow:"4px 0 40px rgba(0,0,0,0.4)" }}>
-          <div style={{ padding:"18px 16px 16px", borderBottom:"1px solid rgba(99,130,255,0.08)" }}>
+        <div style={{ width:220, background:T.surface, borderRight:`1px solid ${T.border}`, padding:"20px 0", display:"flex", flexDirection:"column", flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100 }}>
+          <div style={{ padding:"18px 16px 16px", borderBottom:`1px solid ${T.border}` }}>
             <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:12 }}>
-              <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(145deg,#6366f1,#8b5cf6,#a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 20px rgba(99,102,241,0.45)" }}>
+              <div style={{ width:40, height:40, borderRadius:12, background:"linear-gradient(145deg,#1d4ed8,#2563eb,#7c3aed)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 4px 20px rgba(37,99,235,0.30)" }}>
                   <svg width="22" height="22" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="4" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
                     <rect x="10" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
@@ -6197,35 +6212,34 @@ function AppInner() {
                   </svg>
                 </div>
               <div>
-                <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#818cf8 0%,#c084fc 100%)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>Bank2Tally</div>
-                <div style={{ fontSize:9, color:"#475569", letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:700, marginTop:1 }}>By Verma Consultancy</div>
+                <div style={{ fontWeight:900, fontSize:16, letterSpacing:"-0.5px", background:"linear-gradient(135deg,#1d4ed8 30%,#7c3aed)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>Bank2Tally</div>
+                <div style={{ fontSize:9.5, color:"#64748b", letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:700, marginTop:1 }}>By Verma Consultancy</div>
               </div>
             </div>
-            <div style={{ background:"rgba(99,102,241,0.06)", borderLeft:"2px solid rgba(99,102,241,0.4)", borderRadius:"0 6px 6px 0", padding:"7px 10px" }}>
-              <p style={{ fontSize:10, color:"#475569", lineHeight:1.55, fontStyle:"italic", margin:0 }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
+            <div style={{ background:"rgba(37,99,235,0.06)", borderLeft:`2px solid rgba(37,99,235,0.4)`, borderRadius:"0 6px 6px 0", padding:"7px 10px" }}>
+              <p style={{ fontSize:10.5, color:"#64748b", lineHeight:1.55, fontStyle:"italic", margin:0 }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
             </div>
           </div>
-          <nav style={{ flex:1, padding:"12px 10px" }}>
+          <nav style={{ flex:1, padding:"14px 10px" }}>
             {NAV.map(n=>(
               <button key={n.id} onClick={()=>setScreen(n.id)}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:0, padding:"0", borderRadius:10, fontSize:13, fontFamily:T.font, cursor:"pointer", border:"none", marginBottom:2, transition:"all 0.2s cubic-bezier(0.16,1,0.3,1)", background:"transparent", overflow:"hidden" }}>
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:0, padding:"0", borderRadius:8, fontSize:13, fontFamily:T.font, cursor:"pointer", border:"none", marginBottom:2, transition:"all 0.2s cubic-bezier(0.16,1,0.3,1)", background:"transparent", overflow:"hidden" }}>
                 <div style={{
-                  width:3, alignSelf:"stretch", borderRadius:99, flexShrink:0, marginRight:10,
-                  background: screen===n.id ? "linear-gradient(180deg, #6366f1, #a78bfa)" : "transparent",
-                  transition:"all 0.2s"
+                  width:3, alignSelf:"stretch", borderRadius:2, flexShrink:0, marginRight:10,
+                  background: screen===n.id ? T.accent : "transparent",
+                  transition:"background 0.15s"
                 }} />
                 <div style={{
                   flex:1, display:"flex", alignItems:"center", justifyContent:"space-between",
-                  padding:"9px 11px", borderRadius:9,
-                  background: screen===n.id ? "rgba(99,102,241,0.15)" : n.badge ? "rgba(245,158,11,0.08)" : "transparent",
-                  color: screen===n.id ? "#818cf8" : n.badge ? T.amber : T.textDim,
+                  padding:"9px 10px", borderRadius:7,
+                  background: screen===n.id ? T.accentDim : n.badge ? T.amberDim : "transparent",
+                  color: screen===n.id ? T.accent : n.badge ? T.amber : T.textSub,
                   fontWeight: screen===n.id ? 700 : 500,
-                  border: screen===n.id ? "1px solid rgba(99,102,241,0.2)" : "1px solid transparent",
-                  boxShadow: screen===n.id ? "0 2px 12px rgba(99,102,241,0.15)" : "none",
+                  border: screen===n.id ? 
                 }}>
-                  <span style={{ letterSpacing:"0.01em" }}>{n.label}</span>
+                  <span>{n.label}</span>
                   {n.badge && (
-                    <span style={{ background:"linear-gradient(135deg,#f59e0b,#fbbf24)", color:"#000", borderRadius:99, fontSize:10, fontWeight:800, padding:"1px 7px", minWidth:18, textAlign:"center" }}>
+                    <span style={{ background:T.amber, color:"#fff", borderRadius:99, fontSize:10, fontWeight:700, padding:"1px 7px", minWidth:18, textAlign:"center" }}>
                       {n.badge}
                     </span>
                   )}
@@ -6233,9 +6247,9 @@ function AppInner() {
               </button>
             ))}
           </nav>
-          <div style={{ padding:"14px 14px", borderTop:"1px solid rgba(99,130,255,0.08)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, padding:"8px 10px", borderRadius:10, background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.1)" }}>
-              <div style={{ width:34, height:34, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a78bfa)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:"0 2px 12px rgba(99,102,241,0.4)" }}>{user.avatar}</div>
+          <div style={{ padding:"14px 14px", borderTop:`1px solid ${T.border}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, padding:"8px 10px", borderRadius:10, background:T.surface }}>
+              <div style={{ width:34, height:34, borderRadius:"50%", background:`linear-gradient(135deg,${T.accent},${T.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:`0 2px 10px ${T.accentGlow}` }}>{user.avatar}</div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
                 <div style={{ fontSize:10, color:T.textSub, fontWeight:600 }}>{fromDbRole(user.role)}</div>
@@ -6250,7 +6264,7 @@ function AppInner() {
         </div>
 
         {/* Main */}
-        <div style={{ flex:1, marginLeft:224, padding:"28px 36px", maxWidth:1120, minWidth:0 }}>
+        <div style={{ flex:1, marginLeft:220, padding:"28px 32px", maxWidth:1100, minWidth:0 }}>
           {isImportScreen && <Steps steps={IMPORT_STEPS} current={screen} />}
 
           {screen === SCREENS.DASHBOARD && <DashboardScreen history={history} setScreen={setScreen} user={user} tally={tally} />}
