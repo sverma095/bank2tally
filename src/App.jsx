@@ -186,11 +186,11 @@ const T = {
   teal:        "#0891b2",
   tealDim:     "#cffafe",
   // Text — strong contrast on white/light
-  text:        "#0f172a",
-  textHigh:    "#000000",
-  textMid:     "#334155",
-  textSub:     "#64748b",
-  textDim:     "#94a3b8",
+  text:        "#0f172a",     // headings, primary content
+  textHigh:    "#000000",     // maximum contrast labels
+  textMid:     "#334155",     // secondary text — clearly readable
+  textSub:     "#64748b",     // tertiary — subtle but visible
+  textDim:     "#94a3b8",     // decorative only — NOT for readable text
   // Brand
   font:        "'DM Sans', 'Inter', 'Segoe UI', sans-serif",
   mono:        "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
@@ -2430,27 +2430,23 @@ async function parseFile(file, onProgress) {
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: ${T.bg}; color: ${T.text}; font-family: ${T.font}; -webkit-font-smoothing: antialiased; }
+  body { background: ${T.bg}; color: ${T.text}; font-family: ${T.font}; }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: #e8edf6; }
   ::-webkit-scrollbar-thumb { background: #c8d3e8; border-radius: 99px; }
-  select, input, textarea { background: ${T.surface}; color: ${T.text}; border: 1px solid ${T.border}; border-radius: 8px; font-family: ${T.font}; font-size: 13px; transition: border-color 0.15s; }
-  select:focus, input:focus, textarea:focus { outline: none; border-color: ${T.accent}; box-shadow: 0 0 0 3px ${T.accentGlow}; }
-  input::placeholder { color: ${T.textDim}; }
-  @keyframes fadeIn    { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
-  @keyframes fadeInFast{ from { opacity:0; transform:translateY(4px) } to { opacity:1; transform:translateY(0) } }
-  @keyframes shimmer   { from { background-position: -200% 0 } to { background-position: 200% 0 } }
-  @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:0.5} }
-  @keyframes slideIn   { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-  .fade-in  { animation: fadeIn 0.3s ease forwards; }
-  .fade-fast{ animation: fadeInFast 0.2s ease forwards; }
+  select, input, textarea { background: ${T.surface}; color: ${T.text}; border: 1px solid ${T.border}; border-radius: 8px; font-family: ${T.font}; font-size: 13px; }
+  select:focus, input:focus { outline: none; border-color: ${T.accent}; box-shadow: 0 0 0 3px ${T.accentGlow}; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes shimmer { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+  .fade-in { animation: fadeIn 0.3s ease forwards; }
   .row-hover:hover { background: #f0f4f9 !important; }
   .btn-hover:hover { filter: brightness(0.95); transform: translateY(-1px); }
-  .btn-hover:active { transform: translateY(0); }
   .card-hover:hover { border-color: ${T.accent} !important; box-shadow: 0 0 0 3px ${T.accentGlow}; }
-`
+`;
 
-function Pill({ children, color = "gray", size = "sm", dot = false, style:extra={} }) {
+function Pill({ children, color = "gray", size = "sm", dot = false }) {
   const map = {
     gray:   [T.textDim,  T.surface],
     blue:   [T.accent,   T.accentDim],
@@ -2461,7 +2457,7 @@ function Pill({ children, color = "gray", size = "sm", dot = false, style:extra=
   };
   const [col, bg] = map[color] || map.gray;
   return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:bg, color:col, fontSize:size==="xs"?10:11, fontWeight:600, padding:size==="xs"?"2px 7px":"3px 9px", borderRadius:99, letterSpacing:"0.02em", border:`1px solid ${col}22`, ...extra }}>
+    <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:bg, color:col, fontSize:size==="xs"?10:11, fontWeight:600, padding:size==="xs"?"2px 7px":"3px 9px", borderRadius:99, letterSpacing:"0.02em", border:`1px solid ${col}22` }}>
       {dot && <span style={{width:5,height:5,borderRadius:"50%",background:col,flexShrink:0}}/>}
       {children}
     </span>
@@ -2469,9 +2465,9 @@ function Pill({ children, color = "gray", size = "sm", dot = false, style:extra=
 }
 
 function Btn({ children, onClick, variant="primary", disabled, icon, size="md", fullWidth, style:extra={} }) {
-  const sz = size==="sm" ? { padding:"5px 13px", fontSize:12 } : size==="lg" ? { padding:"12px 24px", fontSize:15 } : { padding:"9px 17px", fontSize:13 };
+  const sz = size==="sm" ? { padding:"5px 12px", fontSize:12 } : size==="lg" ? { padding:"11px 22px", fontSize:15 } : { padding:"8px 16px", fontSize:13 };
   const vars = {
-    primary: { background:`linear-gradient(135deg, ${T.accent}, #1d4ed8)`, color:"#fff", border:"none", boxShadow:`0 2px 12px ${T.accentGlow}` },
+    primary: { background:`linear-gradient(135deg, ${T.accent}, #3b6fd4)`, color:"#fff", border:"none", boxShadow:`0 0 20px ${T.accentGlow}` },
     secondary: { background:T.card, color:T.text, border:`1px solid ${T.border}` },
     outline: { background:"transparent", color:T.accent, border:`1px solid ${T.accent}` },
     ghost: { background:"transparent", color:T.textMid, border:"none" },
@@ -2481,8 +2477,8 @@ function Btn({ children, onClick, variant="primary", disabled, icon, size="md", 
   };
   return (
     <button onClick={onClick} disabled={disabled} className="btn-hover"
-      style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", gap:7, borderRadius:10, fontFamily:T.font, fontWeight:600, cursor:disabled?"not-allowed":"pointer", opacity:disabled?0.4:1, transition:"all 0.18s cubic-bezier(0.16,1,0.3,1)", width:fullWidth?"100%":undefined, letterSpacing:"0.01em", ...sz, ...vars[variant], ...extra }}>
-      {icon && <span style={{fontSize:size==="sm"?12:14}}>{icon}</span>}
+      style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6, borderRadius:9, fontFamily:T.font, fontWeight:500, cursor:disabled?"not-allowed":"pointer", opacity:disabled?0.45:1, transition:"all 0.18s", width:fullWidth?"100%":undefined, ...sz, ...vars[variant], ...extra }}>
+      {icon && <span style={{fontSize:size==="sm"?13:15}}>{icon}</span>}
       {children}
     </button>
   );
@@ -2492,35 +2488,13 @@ function Card({ children, style:extra={}, className="" }) {
   return <div className={className} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:14, padding:20, boxShadow:"0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)", ...extra }}>{children}</div>;
 }
 
-function Input({ value, onChange, placeholder, prefix, suffix, style:extra={}, type, maxLength, onKeyDown, id }) {
+function Input({ value, onChange, placeholder, prefix, suffix, style:extra={} }) {
   return (
     <div style={{ position:"relative", display:"flex", alignItems:"center" }}>
-      {prefix && <span style={{ position:"absolute", left:10, color:T.textDim, fontSize:13, zIndex:1, pointerEvents:"none" }}>{prefix}</span>}
-      <input id={id} value={value} onChange={onChange} placeholder={placeholder} type={type} maxLength={maxLength} onKeyDown={onKeyDown}
+      {prefix && <span style={{ position:"absolute", left:10, color:T.textDim, fontSize:13 }}>{prefix}</span>}
+      <input value={value} onChange={onChange} placeholder={placeholder}
         style={{ width:"100%", padding:"8px 12px", paddingLeft:prefix?32:12, paddingRight:suffix?32:12, ...extra }} />
-      {suffix && <span style={{ position:"absolute", right:10, color:T.textDim, fontSize:13, zIndex:1, pointerEvents:"none" }}>{suffix}</span>}
-    </div>
-  );
-}
-
-function PasswordStrengthBar({ password }) {
-  const checks = [
-    password.length >= 8,
-    /[A-Z]/.test(password),
-    /[0-9]/.test(password),
-    /[^A-Za-z0-9]/.test(password),
-  ];
-  const score = checks.filter(Boolean).length;
-  const color = score <= 1 ? T.red : score === 2 ? T.amber : score === 3 ? "#d97706" : T.green;
-  const label = ["Too short", "Weak", "Fair", "Good", "Strong"][score];
-  return (
-    <div style={{ marginTop:10 }}>
-      <div style={{ display:"flex", gap:3, marginBottom:4 }}>
-        {checks.map((ok, i) => (
-          <div key={i} style={{ flex:1, height:3, borderRadius:2, background: ok ? color : T.borderLight, transition:"background 0.2s" }} />
-        ))}
-      </div>
-      <p style={{ fontSize:11, color }}>{label}</p>
+      {suffix && <span style={{ position:"absolute", right:10, color:T.textDim, fontSize:13 }}>{suffix}</span>}
     </div>
   );
 }
@@ -2559,13 +2533,12 @@ function Steps({ steps, current }) {
     <div style={{ display:"flex", alignItems:"center", gap:0, marginBottom:24 }}>
       {steps.map((s, i) => (
         <div key={i} style={{ display:"flex", alignItems:"center", flex: i < steps.length-1 ? 1 : "none" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:9 }}>
-            <div style={{
-              width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0, transition:"all 0.3s",
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ width:30, height:30, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700,
               background: i < current ? T.green : i === current ? T.accent : T.border,
               color: i <= current ? "#fff" : T.textDim,
               boxShadow: i === current ? `0 0 16px ${T.accentGlow}` : "none",
-            }}>
+              flexShrink:0, transition:"all 0.3s" }}>
               {i < current ? "✓" : i+1}
             </div>
             <span style={{ fontSize:12, fontWeight:i===current?600:400, color:i===current?T.text:T.textDim, whiteSpace:"nowrap" }}>{s}</span>
@@ -2966,9 +2939,11 @@ function LoginScreen({ onLogin }) {
     );
   }
 
+  const BG = `radial-gradient(ellipse at 20% 50%, ${T.accentDim}55 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, ${T.purpleDim}44 0%, transparent 50%)`;
+
   return (
     <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
-      <div style={{ position:"absolute", inset:0, backgroundImage:`radial-gradient(ellipse at 20% 50%, ${T.accentDim}55 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, ${T.purpleDim}44 0%, transparent 50%)`, pointerEvents:"none" }} />
+      <div style={{ position:"absolute", inset:0, backgroundImage:BG, pointerEvents:"none" }} />
       <div className="fade-in" style={{ width:440, position:"relative" }}>
         {/* Logo */}
         {/* ── Brand Header ── */}
@@ -2990,7 +2965,7 @@ function LoginScreen({ onLogin }) {
           <p style={{ color:T.textMid, fontSize:11, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:600, marginBottom:14 }}>Professional Bank Statement Importer</p>
           <div style={{ background:`linear-gradient(135deg, rgba(61,127,255,0.08), rgba(180,124,255,0.08))`, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 14px", textAlign:"left" }}>
             <p style={{ fontSize:12, color:T.textMid, lineHeight:1.65, fontStyle:"italic", marginBottom:4 }}>"{todayQuote.text}"</p>
-            <p style={{ fontSize:10, color:T.textSub, fontWeight:600 }}>— {todayQuote.author}</p>
+            <p style={{ fontSize:10, color:T.textDim, fontWeight:600, letterSpacing:"0.05em" }}>— {todayQuote.author}</p>
           </div>
         </div>
 
@@ -4592,13 +4567,13 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
   const [profErr, setProfErr]       = useState("");
   const [profOk, setProfOk]         = useState("");
 
-  // ── Change Password state ────────────────────────────────
-  const [cpOldPass,  setCpOldPass]  = useState("");
-  const [cpNewPass,  setCpNewPass]  = useState("");
-  const [cpNewPass2, setCpNewPass2] = useState("");
-  const [cpSaving,   setCpSaving]   = useState(false);
-  const [cpErr,      setCpErr]      = useState("");
-  const [cpOk,       setCpOk]       = useState("");
+  // ── Change Password state ─────────────────────────────────────
+  const [cpOld,  setCpOld]  = useState("");
+  const [cpNew1, setCpNew1] = useState("");
+  const [cpNew2, setCpNew2] = useState("");
+  const [cpBusy, setCpBusy] = useState(false);
+  const [cpErr,  setCpErr]  = useState("");
+  const [cpOk,   setCpOk]   = useState("");
 
   // ── Mobile OTP state ─────────────────────────────────────────
   const [otpSent, setOtpSent]         = useState(false);
@@ -4636,43 +4611,39 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
     setProfSaving(false);
   };
 
-  // ── Change Password (verify old pass first, then update) ────────
+  // ── Change Password (verify old pass first) ──────────────────
   const handleChangePassword = async () => {
     setCpErr(""); setCpOk("");
-    if (!cpOldPass)            return setCpErr("Enter your current password.");
-    if (cpNewPass.length < 8)  return setCpErr("New password must be at least 8 characters.");
-    if (cpNewPass !== cpNewPass2) return setCpErr("New passwords do not match.");
-    if (cpNewPass === cpOldPass)  return setCpErr("New password must differ from current.");
-    setCpSaving(true);
+    if (!cpOld)               return setCpErr("Enter your current password.");
+    if (cpNew1.length < 8)    return setCpErr("New password must be at least 8 characters.");
+    if (cpNew1 !== cpNew2)    return setCpErr("New passwords do not match.");
+    if (cpNew1 === cpOld)     return setCpErr("New password must differ from current password.");
+    setCpBusy(true);
     try {
-      // Step 1: Re-authenticate with old password to verify it
-      const signInRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      // Re-authenticate to verify current password
+      const r1 = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON },
-        body: JSON.stringify({ email: user.email, password: cpOldPass }),
+        body: JSON.stringify({ email: user.email, password: cpOld }),
       });
-      const signInData = await signInRes.json();
-      if (!signInRes.ok || signInData.error) {
-        throw new Error("Current password is incorrect.");
-      }
-      // Step 2: Update to new password using the verified token
-      const updateRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      const d1 = await r1.json();
+      if (!r1.ok || d1.error) throw new Error("Current password is incorrect.");
+      // Now update to new password
+      const r2 = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           "apikey": SUPABASE_ANON,
-          "Authorization": `Bearer ${signInData.access_token}`,
+          "Authorization": `Bearer ${d1.access_token}`,
         },
-        body: JSON.stringify({ password: cpNewPass }),
+        body: JSON.stringify({ password: cpNew1 }),
       });
-      const updateData = await updateRes.json();
-      if (!updateRes.ok || updateData.error) {
-        throw new Error(updateData.message || updateData.error_description || "Password update failed.");
-      }
+      const d2 = await r2.json();
+      if (!r2.ok || d2.error) throw new Error(d2.message || d2.error_description || "Update failed.");
       setCpOk("Password changed successfully!");
-      setCpOldPass(""); setCpNewPass(""); setCpNewPass2("");
-    } catch (e) { setCpErr(e.message); }
-    setCpSaving(false);
+      setCpOld(""); setCpNew1(""); setCpNew2("");
+    } catch(e) { setCpErr(e.message); }
+    setCpBusy(false);
   };
 
   // ── Send OTP via Email (free — no SMS charges) ────────────────
@@ -4682,16 +4653,14 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
     if (!user?.email) return setOtpErr("No email address on your account. Contact admin.");
     setOtpSending(true); setOtpErr(""); setOtpValue("");
     try {
-      // Generate 6-digit OTP, store in DB with 10-min expiry
       const code = String(Math.floor(100000 + Math.random() * 900000));
-      const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+      const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       await sb.update("profiles", { id: user.id }, {
         mobile: mob,
         otp_code: code,
         otp_expiry: expiry,
         mobile_verified: false,
       });
-      // Send OTP via Supabase built-in email (free, no SMS API needed)
       const fnRes = await fetch(`${SUPABASE_URL}/functions/v1/send-otp-email`, {
         method: "POST",
         headers: {
@@ -4712,7 +4681,7 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
   // ── Verify OTP (server-side check against DB) ─────────────────
   const verifyOtp = async () => {
-    if (otpValue.length !== 6) return setOtpErr("Enter the 6-digit OTP sent to your email.");
+    if (otpValue.length !== 6) return setOtpErr("Enter the 6-digit OTP sent to your mobile.");
     setOtpVerifying(true); setOtpErr("");
     try {
       const rows = await sb.from("profiles", `id=eq.${user.id}&select=otp_code,otp_expiry`);
@@ -4899,57 +4868,56 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
           </Btn>
         </Card>
 
-        {/* Change Password */}
+        {/* ── Change Password ─────────────────────────────────── */}
         <Card>
-          <div style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
-            🔐 <span>Change Password</span>
-          </div>
+          <p style={{ fontWeight:700, fontSize:14, color:T.text, marginBottom:16 }}>🔐 Change Password</p>
 
-          {cpErr && (
-            <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:14 }}>
-              ✕ {cpErr}
-            </div>
-          )}
-          {cpOk && (
-            <div style={{ background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.green, marginBottom:14 }}>
-              ✓ {cpOk}
-            </div>
-          )}
+          {cpErr && <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.red, marginBottom:12 }}>✕ {cpErr}</div>}
+          {cpOk  && <div style={{ background:T.greenDim, border:`1px solid ${T.green}44`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.green, marginBottom:12 }}>✓ {cpOk}</div>}
 
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
             <div>
               <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>Current Password</label>
-              <Input type="password" value={cpOldPass}
-                onChange={e => { setCpOldPass(e.target.value); setCpErr(""); setCpOk(""); }}
-                placeholder="Enter your current password" prefix="🔑" />
+              <Input type="password" value={cpOld} placeholder="Enter current password" prefix="🔑"
+                onChange={e => { setCpOld(e.target.value); setCpErr(""); setCpOk(""); }} />
             </div>
             <div>
               <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>New Password</label>
-              <Input type="password" value={cpNewPass}
-                onChange={e => { setCpNewPass(e.target.value); setCpErr(""); setCpOk(""); }}
-                placeholder="Minimum 8 characters" prefix="🔒" />
+              <Input type="password" value={cpNew1} placeholder="Minimum 8 characters" prefix="🔒"
+                onChange={e => { setCpNew1(e.target.value); setCpErr(""); setCpOk(""); }} />
+              {cpNew1.length > 0 && (
+                <div style={{ marginTop:6 }}>
+                  <div style={{ display:"flex", gap:3, marginBottom:3 }}>
+                    {[cpNew1.length>=8, /[A-Z]/.test(cpNew1), /[0-9]/.test(cpNew1), /[^A-Za-z0-9]/.test(cpNew1)].map((ok,i) => (
+                      <div key={i} style={{ flex:1, height:3, borderRadius:2,
+                        background: ok ? ([false,false,false,false].filter((_,j)=>j<=i).length === i+1 ? (i<2?T.amber:T.green) : T.amber) : T.borderLight }} />
+                    ))}
+                  </div>
+                  <p style={{ fontSize:11, color:T.textDim }}>
+                    {cpNew1.length<8?"Too short":/[A-Z]/.test(cpNew1)&&/[0-9]/.test(cpNew1)&&/[^A-Za-z0-9]/.test(cpNew1)?"Strong ✓":"Add uppercase, number & symbol"}
+                  </p>
+                </div>
+              )}
             </div>
             <div>
               <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>Confirm New Password</label>
-              <Input type="password" value={cpNewPass2}
-                onChange={e => { setCpNewPass2(e.target.value); setCpErr(""); setCpOk(""); }}
-                placeholder="Re-enter new password" prefix="🔒"
-                onKeyDown={e => e.key === "Enter" && handleChangePassword()} />
+              <Input type="password" value={cpNew2} placeholder="Re-enter new password" prefix="🔒"
+                onChange={e => { setCpNew2(e.target.value); setCpErr(""); setCpOk(""); }}
+                onKeyDown={e => e.key==="Enter" && handleChangePassword()} />
+              {cpNew2.length > 0 && cpNew1 !== cpNew2 && (
+                <p style={{ fontSize:11, color:T.red, marginTop:4 }}>✕ Passwords do not match</p>
+              )}
+              {cpNew2.length > 0 && cpNew1 === cpNew2 && cpNew1.length >= 8 && (
+                <p style={{ fontSize:11, color:T.green, marginTop:4 }}>✓ Passwords match</p>
+              )}
             </div>
           </div>
 
-          {/* Strength bar */}
-          {cpNewPass.length > 0 && (
-            <PasswordStrengthBar password={cpNewPass} />
-          )}
-
-          <div style={{ marginTop:16 }}>
-            <Btn variant="primary" fullWidth icon={cpSaving ? "⟳" : "🔐"}
-              disabled={cpSaving || !cpOldPass || cpNewPass.length < 8 || cpNewPass !== cpNewPass2}
-              onClick={handleChangePassword}>
-              {cpSaving ? "Changing Password…" : "Change Password"}
-            </Btn>
-          </div>
+          <Btn variant="primary" fullWidth icon={cpBusy ? "⏳" : "🔐"}
+            disabled={cpBusy || !cpOld || cpNew1.length<8 || cpNew1!==cpNew2}
+            onClick={handleChangePassword}>
+            {cpBusy ? "Changing Password…" : "Change Password"}
+          </Btn>
         </Card>
 
         {/* Tally connection */}
@@ -5917,8 +5885,7 @@ function AppInner() {
 
   // Restore session on mount — runs once, directly sets user state
   useEffect(() => {
-    let stored;
-    try { stored = localStorage.getItem("sb_session"); } catch { stored = null; }
+    const stored = localStorage.getItem("sb_session");
     if (!stored) return;
     try {
       const session = JSON.parse(stored);
@@ -6223,7 +6190,7 @@ function AppInner() {
           <nav style={{ flex:1, padding:"14px 10px" }}>
             {NAV.map(n=>(
               <button key={n.id} onClick={()=>setScreen(n.id)}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:0, padding:"0", borderRadius:8, fontSize:13, fontFamily:T.font, cursor:"pointer", border:"none", marginBottom:2, transition:"all 0.2s cubic-bezier(0.16,1,0.3,1)", background:"transparent", overflow:"hidden" }}>
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:0, padding:"0", borderRadius:8, fontSize:13, fontFamily:T.font, cursor:"pointer", border:"none", marginBottom:3, transition:"all 0.15s", background:"transparent", overflow:"hidden" }}>
                 <div style={{
                   width:3, alignSelf:"stretch", borderRadius:2, flexShrink:0, marginRight:10,
                   background: screen===n.id ? T.accent : "transparent",
@@ -6235,7 +6202,6 @@ function AppInner() {
                   background: screen===n.id ? T.accentDim : n.badge ? T.amberDim : "transparent",
                   color: screen===n.id ? T.accent : n.badge ? T.amber : T.textSub,
                   fontWeight: screen===n.id ? 700 : 500,
-                  border: screen===n.id ? 
                 }}>
                   <span>{n.label}</span>
                   {n.badge && (
