@@ -157,40 +157,60 @@ const sb = {
 
 // ── Design Tokens ─────────────────────────────────────────────
 const T = {
-  bg:          "#f1f3f6",
+  // Page
+  bg:          "#f4f6f9",
   surface:     "#ffffff",
   card:        "#ffffff",
-  cardHover:   "#fafbfc",
-  border:      "#dde1e9",
-  borderLight: "#eef0f4",
-  borderMid:   "#c8cdd8",
-  accent:      "#2563eb",
-  accentDim:   "#eff4ff",
-  accentGlow:  "rgba(37,99,235,0.12)",
-  accentSoft:  "rgba(37,99,235,0.06)",
-  green:       "#16a34a",
+  cardHover:   "#f8f9fc",
+
+  // Borders
+  border:      "#e2e5ed",
+  borderLight: "#eceef4",
+  borderMid:   "#c9cdd9",
+
+  // Blue accent — vibrant but professional
+  accent:      "#1d6ef5",
+  accentHov:   "#1558d6",
+  accentDim:   "#eaf1ff",
+  accentGlow:  "rgba(29,110,245,0.14)",
+  accentSoft:  "rgba(29,110,245,0.07)",
+  accentMid:   "#93bbfd",
+
+  // Semantic
+  green:       "#15803d",
   greenDim:    "#f0fdf4",
-  greenMid:    "#bbf7d0",
-  amber:       "#ca8a04",
-  amberDim:    "#fefce8",
+  greenMid:    "#86efac",
+  greenBright: "#22c55e",
+  amber:       "#b45309",
+  amberDim:    "#fffbeb",
+  amberMid:    "#fcd34d",
   red:         "#dc2626",
   redDim:      "#fef2f2",
+  redMid:      "#fca5a5",
   purple:      "#7c3aed",
   purpleDim:   "#f5f3ff",
+  teal:        "#0891b2",
+  tealDim:     "#ecfeff",
   gold:        "#b45309",
   goldDim:     "#fffbeb",
-  teal:        "#0891b2",
-  tealDim:     "#f0fdfe",
-  sidebar:     "#1e2433",
-  sidebarHov:  "#272e42",
-  sidebarAct:  "#2563eb",
-  sidebarText: "#b8c0d0",
-  sidebarDim:  "#6b7899",
-  text:        "#111827",
-  textHigh:    "#030712",
-  textMid:     "#374151",
-  textSub:     "#6b7280",
-  textDim:     "#9ca3af",
+
+  // Sidebar — slate-navy, elegant
+  sidebar:     "#16202e",
+  sidebarSec:  "#1c2a3a",
+  sidebarHov:  "#1f3048",
+  sidebarAct:  "#1d6ef5",
+  sidebarActBg:"rgba(29,110,245,0.18)",
+  sidebarText: "#a8b4c8",
+  sidebarDim:  "#5d6f87",
+  sidebarBdr:  "rgba(255,255,255,0.06)",
+
+  // Text
+  text:        "#0f1623",
+  textHigh:    "#000810",
+  textMid:     "#2e3a4e",
+  textSub:     "#5c6b80",
+  textDim:     "#8a97a8",
+
   font:        "'Inter', 'Segoe UI', system-ui, sans-serif",
   mono:        "'JetBrains Mono', 'Consolas', monospace",
 };
@@ -2427,26 +2447,51 @@ async function parseFile(file, onProgress) {
 
 // ── Styled Primitives ────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: ${T.bg}; color: ${T.text}; font-family: ${T.font}; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.5; }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: ${T.borderLight}; }
-  ::-webkit-scrollbar-thumb { background: ${T.borderMid}; border-radius: 3px; }
-  select, input, textarea { background:${T.surface}; color:${T.text}; border:1px solid ${T.border}; border-radius:6px; font-family:${T.font}; font-size:13px; transition:border-color 0.1s,box-shadow 0.1s; }
-  select:focus, input:focus, textarea:focus { outline:none; border-color:${T.accent}; box-shadow:0 0 0 3px ${T.accentGlow}; }
+  body { background:${T.bg}; color:${T.text}; font-family:${T.font}; -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.5; }
+
+  ::-webkit-scrollbar { width:5px; height:5px; }
+  ::-webkit-scrollbar-track { background:${T.borderLight}; }
+  ::-webkit-scrollbar-thumb { background:${T.borderMid}; border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:#a0a8b8; }
+
+  select, input, textarea {
+    background:${T.surface}; color:${T.text}; border:1px solid ${T.border};
+    border-radius:6px; font-family:${T.font}; font-size:13px;
+    transition:border-color 0.12s, box-shadow 0.12s;
+  }
+  select:focus, input:focus, textarea:focus {
+    outline:none; border-color:${T.accent}; box-shadow:0 0 0 3px ${T.accentGlow};
+  }
   input::placeholder { color:${T.textDim}; }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+
+  @keyframes fadeIn  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
   @keyframes shimmer { from{background-position:-400px 0} to{background-position:400px 0} }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.5} }
   @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-  .fade-in,.fade-up,.pop-in { animation:fadeIn 0.18s ease both; }
+
+  .fade-in, .fade-up, .pop-in { animation: fadeIn 0.18s ease both; }
+
   .row-hover:hover { background:${T.cardHover} !important; }
-  .btn-press:hover { opacity:0.85; }
-  .btn-press:active { opacity:0.7; transform:scale(0.99); }
-  .card-lift:hover { border-color:${T.borderMid} !important; }
-  .shimmer-load { background:linear-gradient(90deg,${T.borderLight} 25%,${T.surface} 50%,${T.borderLight} 75%); background-size:400px 100%; animation:shimmer 1.2s infinite; }
+
+  .btn-press        { transition: opacity 0.1s, transform 0.1s, box-shadow 0.1s; }
+  .btn-press:hover  { opacity:0.88; }
+  .btn-press:active { opacity:0.72; transform:scale(0.985); }
+
+  .nav-item { transition: background 0.12s; }
+  .nav-item:hover .nav-inner { background: ${T.sidebarHov} !important; }
+
+  .card-base { transition: box-shadow 0.15s, border-color 0.15s; }
+  .card-base:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.09) !important; border-color: ${T.borderMid} !important; }
+
+  .shimmer-load {
+    background:linear-gradient(90deg,${T.borderLight} 25%,${T.surface} 50%,${T.borderLight} 75%);
+    background-size:400px 100%; animation:shimmer 1.2s infinite;
+  }
 `;
+
 
 function Pill({ children, color="gray", size="sm", dot=false, style:extra={} }) {
   const map = {
@@ -2469,9 +2514,9 @@ function Pill({ children, color="gray", size="sm", dot=false, style:extra={} }) 
 }
 
 function Btn({ children, onClick, variant="primary", disabled, icon, size="md", fullWidth, style:extra={} }) {
-  const sz = { sm:{padding:"4px 11px",fontSize:12}, md:{padding:"6px 14px",fontSize:13}, lg:{padding:"9px 20px",fontSize:14} }[size];
+  const sz = { sm:{padding:"4px 12px",fontSize:12}, md:{padding:"7px 15px",fontSize:13}, lg:{padding:"10px 22px",fontSize:14} }[size] || {padding:"7px 15px",fontSize:13};
   const vars = {
-    primary:   { background:T.accent,   color:"#fff",     border:`1px solid ${T.accent}` },
+    primary:   { background:T.accent,   color:"#fff",     border:`1px solid ${T.accentHov}`, boxShadow:`0 1px 4px ${T.accentGlow}` },
     secondary: { background:T.surface,  color:T.textMid,  border:`1px solid ${T.border}`, boxShadow:"0 1px 2px rgba(0,0,0,0.05)" },
     outline:   { background:"transparent", color:T.accent, border:`1px solid ${T.accent}` },
     ghost:     { background:"transparent", color:T.textSub, border:"1px solid transparent" },
@@ -2482,9 +2527,8 @@ function Btn({ children, onClick, variant="primary", disabled, icon, size="md", 
   return (
     <button onClick={onClick} disabled={disabled} className="btn-press"
       style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6,
-        borderRadius:6, fontFamily:T.font, fontWeight:600,
+        borderRadius:7, fontFamily:T.font, fontWeight:600,
         cursor:disabled?"not-allowed":"pointer", opacity:disabled?0.45:1,
-        transition:"opacity 0.1s, transform 0.1s",
         width:fullWidth?"100%":undefined, ...sz, ...vars[variant], ...extra }}>
       {icon && <span style={{ fontSize:size==="sm"?11:13, lineHeight:1 }}>{icon}</span>}
       {children}
@@ -2494,11 +2538,12 @@ function Btn({ children, onClick, variant="primary", disabled, icon, size="md", 
 
 function Card({ children, style:extra={}, className="", accent=false, hover=false }) {
   return (
-    <div className={`${className}${hover?" card-lift":""}`}
-      style={{ background:T.card, border:`1px solid ${accent ? T.accent+"33" : T.border}`,
-        borderRadius:8, padding:20, boxShadow:"0 1px 3px rgba(0,0,0,0.06)", ...extra }}>
-      {children}
-    </div>
+    <div className={`card-base${hover?" card-lift":""} ${className}`}
+      style={{ background:T.card,
+        border:`1px solid ${accent ? T.accent+"44" : T.border}`,
+        borderRadius:10, padding:20,
+        boxShadow:"0 1px 4px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.04)",
+        ...extra }}>{children}</div>
   );
 }
 
@@ -2588,7 +2633,7 @@ function Steps({ steps, current }) {
               color:i===current?T.text:i<current?T.textMid:T.textDim, whiteSpace:"nowrap" }}>{s}</span>
           </div>
           {i < steps.length-1 && (
-            <div style={{ flex:1, height:1, background:i < current ? T.green : T.border, margin:"0 10px" }} />
+            <div style={{ flex:1, height:2, background:i < current ? T.greenBright : T.borderLight, margin:"0 10px", borderRadius:1 }} />
           )}
         </div>
       ))}
@@ -2598,15 +2643,15 @@ function Steps({ steps, current }) {
 
 function StatCard({ icon, label, value, sub, color=T.accent }) {
   return (
-    <Card style={{ padding:"16px 18px" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-        <div style={{ width:32, height:32, borderRadius:6, background:T.borderLight,
-            border:`1px solid ${T.border}`, display:"flex", alignItems:"center",
-            justifyContent:"center", fontSize:15, flexShrink:0 }}>{icon}</div>
-        <span style={{ fontSize:11, fontWeight:600, color:T.textSub, textTransform:"uppercase", letterSpacing:"0.04em" }}>{label}</span>
+    <Card style={{ padding:"16px 18px", borderLeft:`3px solid ${color}` }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <span style={{ fontSize:11, fontWeight:600, color:T.textSub, textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</span>
+        <div style={{ width:30, height:30, borderRadius:7, background:color+"14",
+            border:`1px solid ${color}30`, display:"flex", alignItems:"center",
+            justifyContent:"center", fontSize:14, flexShrink:0 }}>{icon}</div>
       </div>
-      <div style={{ fontSize:24, fontWeight:700, color:T.text, letterSpacing:"-0.3px" }}>{value}</div>
-      {sub && <div style={{ fontSize:11, color:T.textDim, marginTop:3 }}>{sub}</div>}
+      <div style={{ fontSize:26, fontWeight:700, color:T.text, letterSpacing:"-0.4px", lineHeight:1 }}>{value}</div>
+      {sub && <div style={{ fontSize:11, color:T.textDim, marginTop:5 }}>{sub}</div>}
     </Card>
   );
 }
@@ -2921,7 +2966,7 @@ function LoginScreen({ onLogin }) {
             <h1 style={{ fontSize:21, fontWeight:700, color:T.text, marginBottom:4 }}>Set New Password</h1>
             <p style={{ color:T.textMid, fontSize:13 }}>Choose a strong new password for your account.</p>
           </div>
-          <Card style={{ padding:24, boxShadow:"0 2px 16px rgba(0,0,0,0.09)" }}>
+          <Card style={{ padding:26, boxShadow:"0 4px 24px rgba(0,0,0,0.1), 0 1px 4px rgba(0,0,0,0.06)" }}>
             {resetDone ? (
               <div style={{ textAlign:"center", padding:"10px 0" }}>
                 <div style={{ fontSize:48, marginBottom:12 }}>✅</div>
@@ -3007,7 +3052,7 @@ function LoginScreen({ onLogin }) {
                 </svg>
               </div>
           </div>
-          <h1 style={{ fontSize:22, fontWeight:700, color:T.text, marginBottom:3 }}>Bank2Tally</h1>
+          <h1 style={{ fontSize:21, fontWeight:700, color:T.text, letterSpacing:"-0.3px", marginBottom:4 }}>Bank2Tally</h1>
           <p style={{ color:T.textSub, fontSize:13, marginBottom:16 }}>Professional Bank Statement Importer</p>
           <div style={{ background:T.accentDim, border:`1px solid #bfdbfe`, borderRadius:6, padding:"10px 12px", textAlign:"left" }}>
             <p style={{ fontSize:12, color:"#1e40af", lineHeight:1.6, fontStyle:"italic", marginBottom:3 }}>"{todayQuote.text}"</p>
@@ -3029,7 +3074,7 @@ function LoginScreen({ onLogin }) {
           </div>
         )}
 
-        <Card style={{ padding:24, boxShadow:"0 2px 16px rgba(0,0,0,0.09)" }}>
+        <Card style={{ padding:26, boxShadow:"0 4px 24px rgba(0,0,0,0.1), 0 1px 4px rgba(0,0,0,0.06)" }}>
           {err && (
             <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:16 }}>
               ✕ {err}
@@ -3298,8 +3343,8 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
           <div>
-            <h2 style={{ fontSize:20, fontWeight:700, color:T.text }}>Dashboard</h2>
-            <p style={{ color:T.textSub, fontSize:13, marginTop:2 }}>Welcome back, <strong style={{color:T.text, fontWeight:600}}>{user?.name?.split(" ")[0]}</strong> 👋</p>
+            <h2 style={{ fontSize:20, fontWeight:700, color:T.text, letterSpacing:"-0.3px" }}>Dashboard</h2>
+            <p style={{ color:T.textSub, fontSize:13, marginTop:2 }}>Good day, <strong style={{color:T.text, fontWeight:600}}>{user?.name?.split(" ")[0]}</strong> 👋</p>
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -3318,15 +3363,15 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       </div>
 
       {/* Daily Motivation */}
-      <div style={{ background:T.accentDim, border:"1px solid #bfdbfe", borderRadius:6, padding:"10px 14px", marginBottom:18, display:"flex", alignItems:"center", gap:12 }}>
-        <div style={{ width:3, alignSelf:"stretch", borderRadius:1, background:T.accent, flexShrink:0 }} />
+      <div style={{ background:T.accentDim, border:`1px solid ${T.accentMid}`, borderRadius:8, padding:"11px 16px", marginBottom:20, display:"flex", alignItems:"center", gap:12 }}>
+        <div style={{ width:3, alignSelf:"stretch", borderRadius:2, background:T.accent, flexShrink:0 }} />
         <div>
           <p style={{ fontSize:12, color:"#1e40af", lineHeight:1.6, fontStyle:"italic", marginBottom:2 }}>"{todayQuote.text}"</p>
           <p style={{ fontSize:11, color:"#3b82f6", fontWeight:500 }}>— {todayQuote.author}</p>
         </div>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:22 }}>
         <StatCard icon="📑" label="Total Transactions" value={totalRows.toLocaleString()} sub={`${history.length} imports`} color={T.accent} />
         <StatCard icon="📅" label="This Month" value={thisMonth.length} sub="imports" color={T.purple} />
         <StatCard icon="⚠️" label="Suspense Pending" value={totalSuspense} sub="need review" color={T.amber} />
@@ -3671,7 +3716,7 @@ function ColumnMapScreen({ headers, templateKey, onMapped, onBack }) {
     <div className="fade-in">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
         <div>
-          <h2 style={{ fontSize:19, fontWeight:600, color:T.text, marginBottom:4 }}>Map Columns</h2>
+          <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:4 }}>Map Columns</h2>
           <p style={{ color:T.textDim, fontSize:13 }}>Drag source columns onto the target fields. Required fields marked <span style={{color:T.red}}>*</span></p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
@@ -4223,7 +4268,7 @@ function PreviewScreen({ rows, setRows, filename, selectedCompanies, onBack, onI
 
   return (
     <div className="fade-in">
-      <h2 style={{ fontSize:19, fontWeight:600, color:T.text, marginBottom:4 }}>Preview & Export</h2>
+      <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:4 }}>Preview & Export</h2>
       <p style={{ color:T.textDim, fontSize:13, marginBottom:20 }}>Final review before pushing to Tally or exporting</p>
 
       {/* ── Audit Compliance Bento Grid ── */}
@@ -4502,7 +4547,7 @@ function HistoryScreen({ history, onReimport, onDeleteEntry, onClearAll, onBack 
     <div className="fade-in">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div>
-          <h2 style={{ fontSize:19, fontWeight:600, color:T.text, marginBottom:4 }}>Import History</h2>
+          <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:4 }}>Import History</h2>
           <p style={{ color:T.textDim, fontSize:13 }}>{history.length} import{history.length!==1?"s":""} · auto-deleted after 7 days</p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
@@ -4782,13 +4827,13 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
   return (
     <div className="fade-in">
-      <h2 style={{ fontSize:19, fontWeight:600, color:T.text, marginBottom:18 }}>Settings</h2>
+      <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:18 }}>Settings</h2>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
         {/* Profile Card */}
         <Card style={{ gridColumn:"1 / -1" }}>
           {/* Profile header */}
-          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:18, padding:"12px 14px", borderRadius:7, background:T.accentDim, border:"1px solid #bfdbfe" }}>
-            <div style={{ width:44, height:44, borderRadius:7, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, color:"#fff", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, padding:"14px 16px", borderRadius:10, background:T.accentDim, border:`1px solid ${T.accentMid}` }}>
+            <div style={{ width:46, height:46, borderRadius:9, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:19, fontWeight:700, color:"#fff", flexShrink:0 }}>
               {(profForm.name||user?.name||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{ flex:1, minWidth:0 }}>
@@ -5433,7 +5478,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
       {tab==="users" && (
       <div>
       {/* Stats row */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:22 }}>
         {[
           ["Total Users",  users.length,                                        T.accent],
           ["Active",       users.filter(u=>u.status==="approved").length,        T.green],
@@ -6188,12 +6233,12 @@ function AppInner() {
 
   const isAdmin = user?.role === "admin";
   const NAV = [
-    { id:SCREENS.DASHBOARD, label:"Dashboard",  abbr:"DB" },
-    { id:SCREENS.UPLOAD,    label:"New Import",  abbr:"NI" },
-    { id:SCREENS.HISTORY,   label:"History",     abbr:"HX" },
-    { id:SCREENS.SETTINGS,  label:"Settings",    abbr:"ST" },
+    { id:SCREENS.DASHBOARD, label:"Dashboard",  icon:"▦",  group:"main" },
+    { id:SCREENS.UPLOAD,    label:"New Import",  icon:"⊕",  group:"main" },
+    { id:SCREENS.HISTORY,   label:"History",     icon:"≡",  group:"main" },
+    { id:SCREENS.SETTINGS,  label:"Settings",    icon:"⚙",  group:"config" },
     ...(user?.role === "admin" ? [
-      { id:SCREENS.USER_MGMT, label:"Users",     abbr:"US", badge: pendingCount > 0 ? pendingCount : null },
+      { id:SCREENS.USER_MGMT, label:"Users", icon:"◎", group:"config", badge: pendingCount > 0 ? pendingCount : null },
     ] : []),
   ];
 
@@ -6210,72 +6255,120 @@ function AppInner() {
 
       <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:T.font, backgroundImage:"none" }}>
         {/* Sidebar */}
-        <div style={{ width:216, background:T.sidebar, padding:"18px 0", display:"flex", flexDirection:"column", flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100, borderRight:"1px solid #111827" }}>
-          <div style={{ padding:"14px 14px 12px", borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:12 }}>
-              <div style={{ width:34, height:34, borderRadius:6, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <svg width="22" height="22" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="4" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
-                    <rect x="10" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
-                    <rect x="16" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
-                    <rect x="22" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
-                    <rect x="28" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
-                    <rect x="2" y="31" width="33" height="3" rx="1.5" fill="white"/>
-                    <polygon points="19,4 2,15 36,15" fill="white" fillOpacity="0.95"/>
-                  </svg>
-                </div>
-              <div>
-                <div style={{ fontWeight:700, fontSize:14, color:"#fff", lineHeight:1.2 }}>Bank2Tally</div>
-                <div style={{ fontSize:10, color:T.sidebarDim, marginTop:1 }}>By Verma Consultancy</div>
+        <div style={{ width:220, background:T.sidebar, display:"flex", flexDirection:"column",
+            flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100,
+            borderRight:`1px solid ${T.sidebarBdr}` }}>
+
+          {/* ── Brand ── */}
+          <div style={{ padding:"18px 16px 14px", borderBottom:`1px solid ${T.sidebarBdr}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:36, height:36, borderRadius:8, background:T.accent,
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <svg width="20" height="20" viewBox="0 0 38 38" fill="none">
+                  <rect x="4"  y="17" width="4" height="13" rx="1" fill="white"/>
+                  <rect x="10" y="17" width="4" height="13" rx="1" fill="white"/>
+                  <rect x="16" y="17" width="4" height="13" rx="1" fill="white"/>
+                  <rect x="22" y="17" width="4" height="13" rx="1" fill="white"/>
+                  <rect x="28" y="17" width="4" height="13" rx="1" fill="white"/>
+                  <rect x="2"  y="31" width="33" height="3"  rx="1.5" fill="white"/>
+                  <polygon points="19,4 2,15 36,15" fill="white"/>
+                </svg>
               </div>
-            </div>
-            <div style={{ background:"rgba(255,255,255,0.04)", borderLeft:"2px solid rgba(255,255,255,0.15)", borderRadius:"0 4px 4px 0", padding:"7px 10px" }}>
-              <p style={{ fontSize:10.5, color:T.sidebarText, lineHeight:1.55, fontStyle:"italic", margin:0 }}>"{todayQuote.text.slice(0,72)}{todayQuote.text.length>72?"…":""}"</p>
+              <div>
+                <div style={{ fontWeight:700, fontSize:14, color:"#fff", letterSpacing:"-0.2px" }}>Bank2Tally</div>
+                <div style={{ fontSize:10, color:T.sidebarDim, marginTop:1 }}>by Verma Consultancy</div>
+              </div>
             </div>
           </div>
-          <nav style={{ flex:1, padding:"10px 8px" }}>
-            {NAV.map(n=>(
-              <button key={n.id} onClick={()=>setScreen(n.id)}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:0, padding:"0", borderRadius:5, fontSize:13, fontFamily:T.font, cursor:"pointer", border:"none", marginBottom:2, transition:"background 0.1s", background:"transparent", overflow:"hidden" }}>
-                <div style={{
-                  width:3, alignSelf:"stretch", borderRadius:0, flexShrink:0, marginRight:10,
-                  background: screen===n.id ? "#60a5fa" : "transparent"
-                }} />
-                <div style={{
-                  flex:1, display:"flex", alignItems:"center", justifyContent:"space-between",
-                  padding:"7px 10px", borderRadius:5,
-                  background: screen===n.id ? "rgba(37,99,235,0.85)" : n.badge ? "rgba(202,138,4,0.15)" : "transparent",
-                  color: screen===n.id ? "#fff" : n.badge ? "#fcd34d" : T.sidebarText,
-                  fontWeight: screen===n.id ? 600 : 400,
-                }}>
-                  <span>{n.label}</span>
-                  {n.badge && (
-                    <span style={{ background:"rgba(202,138,4,0.3)", color:"#fcd34d", borderRadius:4, fontSize:10, fontWeight:700, padding:"1px 6px" }}>
-                      {n.badge}
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
+
+          {/* ── Nav ── */}
+          <nav style={{ flex:1, padding:"10px 10px", overflowY:"auto" }}>
+
+            {/* Group label: MAIN */}
+            <div style={{ fontSize:9.5, fontWeight:700, color:T.sidebarDim, letterSpacing:"0.1em",
+                textTransform:"uppercase", padding:"8px 10px 4px" }}>Menu</div>
+
+            {NAV.filter(n=>n.group==="main").map(n => {
+              const active = screen === n.id;
+              return (
+                <button key={n.id} className="nav-item" onClick={() => setScreen(n.id)}
+                  style={{ width:"100%", display:"flex", alignItems:"center", padding:0,
+                    borderRadius:7, border:"none", marginBottom:2,
+                    background:"transparent", cursor:"pointer", fontFamily:T.font }}>
+                  <div className="nav-inner" style={{ display:"flex", alignItems:"center", gap:9,
+                      flex:1, padding:"8px 10px", borderRadius:7,
+                      background: active ? T.sidebarActBg : "transparent",
+                      borderLeft: active ? `3px solid ${T.accent}` : "3px solid transparent",
+                      transition:"background 0.12s, border-color 0.12s" }}>
+                    <span style={{ fontSize:15, lineHeight:1, color: active ? T.accent : T.sidebarText,
+                        flexShrink:0, width:18, textAlign:"center" }}>{n.icon}</span>
+                    <span style={{ fontSize:13, fontWeight: active ? 600 : 400,
+                        color: active ? "#fff" : T.sidebarText }}>{n.label}</span>
+                  </div>
+                </button>
+              );
+            })}
+
+            {/* Group label: CONFIG */}
+            {NAV.filter(n=>n.group==="config").length > 0 && (
+              <div style={{ fontSize:9.5, fontWeight:700, color:T.sidebarDim, letterSpacing:"0.1em",
+                  textTransform:"uppercase", padding:"14px 10px 4px" }}>Manage</div>
+            )}
+
+            {NAV.filter(n=>n.group==="config").map(n => {
+              const active = screen === n.id;
+              return (
+                <button key={n.id} className="nav-item" onClick={() => setScreen(n.id)}
+                  style={{ width:"100%", display:"flex", alignItems:"center", padding:0,
+                    borderRadius:7, border:"none", marginBottom:2,
+                    background:"transparent", cursor:"pointer", fontFamily:T.font }}>
+                  <div className="nav-inner" style={{ display:"flex", alignItems:"center", gap:9,
+                      flex:1, padding:"8px 10px", borderRadius:7,
+                      background: active ? T.sidebarActBg : "transparent",
+                      borderLeft: active ? `3px solid ${T.accent}` : "3px solid transparent",
+                      transition:"background 0.12s, border-color 0.12s" }}>
+                    <span style={{ fontSize:15, lineHeight:1, color: active ? T.accent : T.sidebarText,
+                        flexShrink:0, width:18, textAlign:"center" }}>{n.icon}</span>
+                    <span style={{ fontSize:13, fontWeight: active ? 600 : 400,
+                        color: active ? "#fff" : T.sidebarText }}>{n.label}</span>
+                    {n.badge && (
+                      <span style={{ marginLeft:"auto", background:T.accent, color:"#fff",
+                          borderRadius:10, fontSize:10, fontWeight:700,
+                          padding:"1px 7px", minWidth:18, textAlign:"center" }}>
+                        {n.badge}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </nav>
-          <div style={{ padding:"10px 10px", borderTop:"1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, padding:"7px 9px", borderRadius:6, background:"rgba(255,255,255,0.05)" }}>
-              <div style={{ width:30, height:30, borderRadius:5, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#fff", flexShrink:0 }}>{user.avatar}</div>
+
+          {/* ── User strip ── */}
+          <div style={{ padding:"12px 10px", borderTop:`1px solid ${T.sidebarBdr}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:9, padding:"8px 10px",
+                borderRadius:8, background:"rgba(255,255,255,0.04)",
+                border:`1px solid ${T.sidebarBdr}`, marginBottom:8 }}>
+              <div style={{ width:30, height:30, borderRadius:6, background:T.accent,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:12, fontWeight:700, color:"#fff", flexShrink:0 }}>{user.avatar}</div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
-                <div style={{ fontSize:10, color:T.textSub, fontWeight:600 }}>{fromDbRole(user.role)}</div>
-                {user.email && <div style={{ fontSize:9.5, color:T.textDim, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:130 }}>{user.email}</div>}
+                <div style={{ fontSize:12, fontWeight:600, color:"#e2e8f0",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
+                <div style={{ fontSize:10, color:T.sidebarDim }}>{fromDbRole(user.role)}</div>
               </div>
             </div>
-            <button onClick={onLogout}
-              style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, fontFamily:T.font, cursor:"pointer", border:`1px solid ${T.red}44`, background:T.redDim, color:T.red, transition:"all 0.15s" }}>
+            <button onClick={onLogout} style={{ width:"100%", padding:"7px", borderRadius:6,
+                fontSize:12, fontWeight:500, fontFamily:T.font, cursor:"pointer",
+                border:`1px solid rgba(239,68,68,0.3)`, background:"rgba(239,68,68,0.08)",
+                color:"#f87171", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
               Sign Out
             </button>
           </div>
         </div>
 
         {/* Main */}
-        <div style={{ flex:1, marginLeft:216, padding:"24px 28px", maxWidth:1100, minWidth:0 }}>
+        <div style={{ flex:1, marginLeft:220, padding:"24px 30px", maxWidth:1080, minWidth:0 }}>
           {isImportScreen && <Steps steps={IMPORT_STEPS} current={screen} />}
 
           {screen === SCREENS.DASHBOARD && <DashboardScreen history={history} setScreen={setScreen} user={user} tally={tally} />}
