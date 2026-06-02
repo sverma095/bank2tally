@@ -155,64 +155,58 @@ const sb = {
   },
 };
 
-// ── Design Tokens ─────────────────────────────────────────────
+// ── Design Tokens — Warm Ledger Premium ────────────────────────
 const T = {
-  // Page
-  bg:          "#f4f6f9",
+  bg:          "#f7f8fc",
+  bgDeep:      "#eff1f8",
   surface:     "#ffffff",
   card:        "#ffffff",
-  cardHover:   "#f8f9fc",
-
-  // Borders
-  border:      "#e2e5ed",
-  borderLight: "#eceef4",
-  borderMid:   "#c9cdd9",
-
-  // Blue accent — vibrant but professional
-  accent:      "#1d6ef5",
-  accentHov:   "#1558d6",
-  accentDim:   "#eaf1ff",
-  accentGlow:  "rgba(29,110,245,0.14)",
-  accentSoft:  "rgba(29,110,245,0.07)",
-  accentMid:   "#93bbfd",
-
-  // Semantic
-  green:       "#15803d",
-  greenDim:    "#f0fdf4",
-  greenMid:    "#86efac",
+  cardHover:   "#fafbfe",
+  border:      "#e3e7f0",
+  borderLight: "#edf0f8",
+  borderMid:   "#c6ccdc",
+  borderHov:   "#a8b2cc",
+  accent:      "#2952e3",
+  accentHov:   "#1e3fc4",
+  accentDim:   "#eef1fd",
+  accentGlow:  "rgba(41,82,227,0.15)",
+  accentSoft:  "rgba(41,82,227,0.07)",
+  accentMid:   "#8ba4f5",
+  accentLight: "#dce4fc",
+  green:       "#0d7a4e",
+  greenDim:    "#edfaf4",
+  greenMid:    "#6ee7b7",
+  greenText:   "#065f3a",
   greenBright: "#22c55e",
-  amber:       "#b45309",
-  amberDim:    "#fffbeb",
-  amberMid:    "#fcd34d",
-  red:         "#dc2626",
-  redDim:      "#fef2f2",
-  redMid:      "#fca5a5",
-  purple:      "#7c3aed",
+  amber:       "#b25000",
+  amberDim:    "#fff7ed",
+  amberMid:    "#fdba74",
+  red:         "#c8192d",
+  redDim:      "#fff1f2",
+  redMid:      "#fda4af",
+  purple:      "#6d28d9",
   purpleDim:   "#f5f3ff",
-  teal:        "#0891b2",
+  teal:        "#0a7f8e",
   tealDim:     "#ecfeff",
-  gold:        "#b45309",
-  goldDim:     "#fffbeb",
-
-  // Sidebar — slate-navy, elegant
-  sidebar:     "#16202e",
-  sidebarSec:  "#1c2a3a",
-  sidebarHov:  "#1f3048",
-  sidebarAct:  "#1d6ef5",
-  sidebarActBg:"rgba(29,110,245,0.18)",
-  sidebarText: "#a8b4c8",
-  sidebarDim:  "#5d6f87",
-  sidebarBdr:  "rgba(255,255,255,0.06)",
-
-  // Text
-  text:        "#0f1623",
-  textHigh:    "#000810",
-  textMid:     "#2e3a4e",
-  textSub:     "#5c6b80",
-  textDim:     "#8a97a8",
-
-  font:        "'Inter', 'Segoe UI', system-ui, sans-serif",
-  mono:        "'JetBrains Mono', 'Consolas', monospace",
+  gold:        "#a16207",
+  goldDim:     "#fefce8",
+  sidebar:     "#141c2e",
+  sidebarSec:  "#1a2540",
+  sidebarHov:  "#1f2e50",
+  sidebarAct:  "#2952e3",
+  sidebarActBg:"rgba(41,82,227,0.2)",
+  sidebarText: "#9daec8",
+  sidebarHead: "#c8d4e8",
+  sidebarDim:  "#4e607e",
+  sidebarBdr:  "rgba(255,255,255,0.07)",
+  text:        "#0e1526",
+  textHigh:    "#060c18",
+  textMid:     "#2a3650",
+  textSub:     "#546070",
+  textDim:     "#8896aa",
+  textOnDark:  "#e8edf8",
+  font:        "'DM Sans', 'Inter', system-ui, sans-serif",
+  mono:        "'DM Mono', 'JetBrains Mono', monospace",
 };
 
 // ── Motivational Quotes ──────────────────────────────────────────
@@ -2447,90 +2441,83 @@ async function parseFile(file, onProgress) {
 
 // ── Styled Primitives ────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
-
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background:${T.bg}; color:${T.text}; font-family:${T.font}; -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.5; }
-
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  body { background:${T.bg}; color:${T.text}; font-family:${T.font}; -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.56; letter-spacing:-0.01em; }
   ::-webkit-scrollbar { width:5px; height:5px; }
   ::-webkit-scrollbar-track { background:${T.borderLight}; }
-  ::-webkit-scrollbar-thumb { background:${T.borderMid}; border-radius:3px; }
-  ::-webkit-scrollbar-thumb:hover { background:#a0a8b8; }
-
-  select, input, textarea {
-    background:${T.surface}; color:${T.text}; border:1px solid ${T.border};
-    border-radius:6px; font-family:${T.font}; font-size:13px;
-    transition:border-color 0.12s, box-shadow 0.12s;
-  }
-  select:focus, input:focus, textarea:focus {
-    outline:none; border-color:${T.accent}; box-shadow:0 0 0 3px ${T.accentGlow};
-  }
+  ::-webkit-scrollbar-thumb { background:${T.borderMid}; border-radius:10px; }
+  ::-webkit-scrollbar-thumb:hover { background:${T.borderHov}; }
+  select,input,textarea { background:${T.surface}; color:${T.text}; border:1.5px solid ${T.border}; border-radius:8px; font-family:${T.font}; font-size:13.5px; transition:border-color 0.12s,box-shadow 0.12s; letter-spacing:-0.01em; }
+  select:focus,input:focus,textarea:focus { outline:none; border-color:${T.accent}; box-shadow:0 0 0 3px ${T.accentGlow}; }
   input::placeholder { color:${T.textDim}; }
-
-  @keyframes fadeIn  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeIn  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
   @keyframes shimmer { from{background-position:-400px 0} to{background-position:400px 0} }
   @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.5} }
   @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
-
-  .fade-in, .fade-up, .pop-in { animation: fadeIn 0.18s ease both; }
-
-  .row-hover:hover { background:${T.cardHover} !important; }
-
-  .btn-press        { transition: opacity 0.1s, transform 0.1s, box-shadow 0.1s; }
-  .btn-press:hover  { opacity:0.88; }
-  .btn-press:active { opacity:0.72; transform:scale(0.985); }
-
-  .nav-item { transition: background 0.12s; }
-  .nav-item:hover .nav-inner { background: ${T.sidebarHov} !important; }
-
-  .card-base { transition: box-shadow 0.15s, border-color 0.15s; }
-  .card-base:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.09) !important; border-color: ${T.borderMid} !important; }
-
-  .shimmer-load {
-    background:linear-gradient(90deg,${T.borderLight} 25%,${T.surface} 50%,${T.borderLight} 75%);
-    background-size:400px 100%; animation:shimmer 1.2s infinite;
-  }
+  @keyframes popIn   { 0%{opacity:0;transform:scale(0.96)} 100%{opacity:1;transform:scale(1)} }
+  .fade-in,.fade-up { animation:fadeIn 0.22s cubic-bezier(0.16,1,0.3,1) both; }
+  .pop-in           { animation:popIn  0.18s cubic-bezier(0.16,1,0.3,1) both; }
+  .row-hover:hover  { background:${T.cardHover} !important; }
+  .btn-base { transition:all 0.14s; }
+  .btn-base:hover  { filter:brightness(1.06); transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,0.13); }
+  .btn-base:active { filter:brightness(0.94); transform:translateY(0); box-shadow:none; }
+  .btn-press { transition:opacity 0.1s,transform 0.1s; }
+  .btn-press:hover  { opacity:0.86; }
+  .btn-press:active { opacity:0.7;  transform:scale(0.985); }
+  .nav-item { transition:background 0.1s; }
+  .nav-item:hover .nav-inner { background:${T.sidebarHov} !important; }
+  .card-base { transition:box-shadow 0.15s,border-color 0.15s; }
+  .card-base:hover { box-shadow:0 6px 24px rgba(41,82,227,0.08),0 2px 6px rgba(0,0,0,0.05) !important; border-color:${T.borderHov} !important; }
+  .shimmer-load { background:linear-gradient(90deg,${T.borderLight} 25%,${T.surface} 50%,${T.borderLight} 75%); background-size:400px 100%; animation:shimmer 1.2s infinite; }
 `;
 
 
 function Pill({ children, color="gray", size="sm", dot=false, style:extra={} }) {
   const map = {
-    gray:   { fg:T.textSub, bg:T.borderLight,  bd:T.border   },
-    blue:   { fg:T.accent,  bg:T.accentDim,    bd:"#bfdbfe"  },
-    green:  { fg:T.green,   bg:T.greenDim,     bd:T.greenMid },
-    amber:  { fg:T.amber,   bg:T.amberDim,     bd:"#fde68a"  },
-    red:    { fg:T.red,     bg:T.redDim,       bd:"#fecaca"  },
-    purple: { fg:T.purple,  bg:T.purpleDim,    bd:"#ddd6fe"  },
+    gray:   { fg:T.textSub,  bg:T.borderLight, bd:T.borderMid },
+    blue:   { fg:"#1a3fc4",  bg:T.accentDim,   bd:T.accentLight },
+    green:  { fg:T.greenText,bg:T.greenDim,    bd:T.greenMid },
+    amber:  { fg:"#7c3500",  bg:T.amberDim,    bd:T.amberMid },
+    red:    { fg:"#9b0f1e",  bg:T.redDim,      bd:T.redMid },
+    purple: { fg:"#5b21b6",  bg:T.purpleDim,   bd:"#c4b5fd" },
   };
   const { fg, bg, bd } = map[color] || map.gray;
   return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:bg, color:fg,
-      fontSize:size==="xs"?10:11, fontWeight:600, padding:size==="xs"?"1px 6px":"2px 8px",
-      borderRadius:4, border:`1px solid ${bd}`, fontFamily:T.font, whiteSpace:"nowrap", ...extra }}>
-      {dot && <span style={{ width:6, height:6, borderRadius:"50%", background:fg, flexShrink:0 }} />}
+    <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+      background:bg, color:fg, fontSize:size==="xs"?10.5:12, fontWeight:600,
+      padding:size==="xs"?"2px 7px":"3px 9px", borderRadius:5,
+      border:`1px solid ${bd}`, fontFamily:T.font,
+      whiteSpace:"nowrap", letterSpacing:"0.01em", ...extra }}>
+      {dot && <span style={{ width:5, height:5, borderRadius:"50%", background:fg, flexShrink:0 }} />}
       {children}
     </span>
   );
 }
 
 function Btn({ children, onClick, variant="primary", disabled, icon, size="md", fullWidth, style:extra={} }) {
-  const sz = { sm:{padding:"4px 12px",fontSize:12}, md:{padding:"7px 15px",fontSize:13}, lg:{padding:"10px 22px",fontSize:14} }[size] || {padding:"7px 15px",fontSize:13};
+  const sz = {
+    sm: { padding:"5px 13px", fontSize:12.5, borderRadius:7 },
+    md: { padding:"8px 16px", fontSize:13.5, borderRadius:8 },
+    lg: { padding:"11px 24px", fontSize:15,   borderRadius:9 },
+  }[size] || { padding:"8px 16px", fontSize:13.5, borderRadius:8 };
   const vars = {
-    primary:   { background:T.accent,   color:"#fff",     border:`1px solid ${T.accentHov}`, boxShadow:`0 1px 4px ${T.accentGlow}` },
-    secondary: { background:T.surface,  color:T.textMid,  border:`1px solid ${T.border}`, boxShadow:"0 1px 2px rgba(0,0,0,0.05)" },
-    outline:   { background:"transparent", color:T.accent, border:`1px solid ${T.accent}` },
-    ghost:     { background:"transparent", color:T.textSub, border:"1px solid transparent" },
-    danger:    { background:T.redDim,   color:T.red,      border:"1px solid #fecaca" },
-    success:   { background:T.greenDim, color:T.green,    border:`1px solid ${T.greenMid}` },
-    amber:     { background:T.amberDim, color:T.amber,    border:"1px solid #fde68a" },
+    primary:   { background:T.accent,   color:"#fff",        border:`1px solid ${T.accentHov}`, boxShadow:`0 2px 8px ${T.accentGlow}` },
+    secondary: { background:T.surface,  color:T.textMid,     border:`1.5px solid ${T.border}`,  boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+    outline:   { background:"transparent", color:T.accent,   border:`1.5px solid ${T.accent}` },
+    ghost:     { background:"transparent", color:T.textSub,  border:"1.5px solid transparent" },
+    danger:    { background:T.redDim,   color:"#9b0f1e",     border:"1.5px solid #fda4af" },
+    success:   { background:T.greenDim, color:T.greenText,   border:`1.5px solid ${T.greenMid}` },
+    amber:     { background:T.amberDim, color:"#7c3500",     border:"1.5px solid #fdba74" },
   };
   return (
-    <button onClick={onClick} disabled={disabled} className="btn-press"
-      style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6,
-        borderRadius:7, fontFamily:T.font, fontWeight:600,
+    <button onClick={onClick} disabled={disabled} className="btn-base"
+      style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
+        gap:7, fontFamily:T.font, fontWeight:600, letterSpacing:"-0.01em",
         cursor:disabled?"not-allowed":"pointer", opacity:disabled?0.45:1,
         width:fullWidth?"100%":undefined, ...sz, ...vars[variant], ...extra }}>
-      {icon && <span style={{ fontSize:size==="sm"?11:13, lineHeight:1 }}>{icon}</span>}
+      {icon && <span style={{ fontSize:size==="sm"?12:14, lineHeight:1 }}>{icon}</span>}
       {children}
     </button>
   );
@@ -2538,23 +2525,25 @@ function Btn({ children, onClick, variant="primary", disabled, icon, size="md", 
 
 function Card({ children, style:extra={}, className="", accent=false, hover=false }) {
   return (
-    <div className={`card-base${hover?" card-lift":""} ${className}`}
+    <div className={`card-base${hover?" card-hover":""} ${className}`}
       style={{ background:T.card,
-        border:`1px solid ${accent ? T.accent+"44" : T.border}`,
-        borderRadius:10, padding:20,
-        boxShadow:"0 1px 4px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.04)",
-        ...extra }}>{children}</div>
+        border:`1.5px solid ${accent ? T.accent+"44" : T.border}`,
+        borderRadius:12, padding:22,
+        boxShadow:"0 1px 4px rgba(14,21,38,0.05), 0 2px 8px rgba(14,21,38,0.04)",
+        ...extra }}>
+      {children}
+    </div>
   );
 }
 
 function Input({ value, onChange, placeholder, prefix, suffix, style:extra={}, type, maxLength, onKeyDown, id }) {
   return (
     <div style={{ position:"relative", display:"flex", alignItems:"center" }}>
-      {prefix && <span style={{ position:"absolute", left:10, color:T.textDim, fontSize:13, zIndex:1, pointerEvents:"none" }}>{prefix}</span>}
+      {prefix && <span style={{ position:"absolute", left:11, color:T.textDim, fontSize:14, zIndex:1, pointerEvents:"none", lineHeight:1 }}>{prefix}</span>}
       <input id={id} value={value} onChange={onChange} placeholder={placeholder}
         type={type} maxLength={maxLength} onKeyDown={onKeyDown}
-        style={{ width:"100%", padding:"7px 11px", paddingLeft:prefix?30:11, paddingRight:suffix?30:11, ...extra }} />
-      {suffix && <span style={{ position:"absolute", right:10, color:T.textDim, fontSize:13, zIndex:1, pointerEvents:"none" }}>{suffix}</span>}
+        style={{ width:"100%", padding:"9px 13px", paddingLeft:prefix?34:13, paddingRight:suffix?34:13, ...extra }} />
+      {suffix && <span style={{ position:"absolute", right:11, color:T.textDim, fontSize:13, zIndex:1, pointerEvents:"none" }}>{suffix}</span>}
     </div>
   );
 }
@@ -2563,31 +2552,34 @@ function PasswordStrengthBar({ password }) {
   const checks = [password.length >= 8, /[A-Z]/.test(password), /[0-9]/.test(password), /[^A-Za-z0-9]/.test(password)];
   const score = checks.filter(Boolean).length;
   const col = score <= 1 ? T.red : score <= 2 ? T.amber : T.green;
+  const labels = ["Too short", "Weak", "Fair", "Good", "Strong ✓"];
   return (
-    <div style={{ marginTop:6 }}>
-      <div style={{ display:"flex", gap:3, marginBottom:3 }}>
-        {checks.map((ok, i) => <div key={i} style={{ flex:1, height:3, borderRadius:2, background:ok?col:T.borderLight }} />)}
+    <div style={{ marginTop:7 }}>
+      <div style={{ display:"flex", gap:4, marginBottom:4 }}>
+        {checks.map((ok, i) => <div key={i} style={{ flex:1, height:3, borderRadius:2, background:ok?col:T.borderLight, transition:"background 0.2s" }} />)}
       </div>
-      <p style={{ fontSize:11, color:col, fontWeight:600 }}>{["Too short","Weak","Fair","Good","Strong"][score]}</p>
+      <p style={{ fontSize:11.5, color:col, fontWeight:600 }}>{labels[score]}</p>
     </div>
   );
 }
 
-function Modal({ open, onClose, title, children, width=540 }) {
+function Modal({ open, onClose, title, children, width=560 }) {
   if (!open) return null;
   return (
-    <div className="fade-in" style={{ position:"fixed", inset:0, background:"rgba(17,24,39,0.45)", zIndex:9000,
-        display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(2px)" }}
+    <div className="fade-in" style={{ position:"fixed", inset:0, background:"rgba(10,15,30,0.45)",
+        zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center",
+        backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)" }}
       onClick={onClose}>
-      <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:10,
-          width, maxWidth:"95vw", maxHeight:"88vh", overflow:"auto", padding:24,
-          boxShadow:"0 8px 32px rgba(0,0,0,0.14)" }}
+      <div className="pop-in" style={{ background:T.card, border:`1.5px solid ${T.border}`,
+          borderRadius:14, width, maxWidth:"95vw", maxHeight:"88vh", overflow:"auto",
+          padding:28, boxShadow:"0 16px 48px rgba(10,15,30,0.18), 0 4px 16px rgba(0,0,0,0.08)" }}
         onClick={e=>e.stopPropagation()}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
-          <span style={{ fontWeight:600, fontSize:15, color:T.text }}>{title}</span>
-          <button onClick={onClose} style={{ background:T.borderLight, border:`1px solid ${T.border}`,
-              borderRadius:5, color:T.textSub, cursor:"pointer", width:26, height:26,
-              display:"flex", alignItems:"center", justifyContent:"center", fontSize:13 }}>✕</button>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <span style={{ fontWeight:700, fontSize:16, color:T.text, letterSpacing:"-0.2px" }}>{title}</span>
+          <button onClick={onClose} style={{ width:28, height:28, borderRadius:6,
+              background:T.borderLight, border:`1.5px solid ${T.border}`,
+              color:T.textSub, cursor:"pointer", display:"flex",
+              alignItems:"center", justifyContent:"center", fontSize:13 }}>✕</button>
         </div>
         {children}
       </div>
@@ -2596,18 +2588,26 @@ function Modal({ open, onClose, title, children, width=540 }) {
 }
 
 function Toast({ toasts }) {
-  const cfg = { error:[T.red,T.redDim,"#fecaca","✕"], warn:[T.amber,T.amberDim,"#fde68a","!"], success:[T.green,T.greenDim,T.greenMid,"✓"], info:[T.accent,T.accentDim,"#bfdbfe","i"] };
+  const cfg = {
+    error:   ["#9b0f1e", T.redDim,    "#fda4af", "✕"],
+    warn:    ["#7c3500", T.amberDim,  "#fdba74", "!"],
+    success: [T.greenText, T.greenDim, T.greenMid, "✓"],
+    info:    [T.accent,  T.accentDim, T.accentMid, "i"],
+  };
   return (
-    <div style={{ position:"fixed", top:14, right:14, zIndex:9999, display:"flex", flexDirection:"column", gap:8 }}>
+    <div style={{ position:"fixed", top:16, right:16, zIndex:9999, display:"flex", flexDirection:"column", gap:10 }}>
       {toasts.map(t => {
-        const [col, bg, bd, ico] = cfg[t.type] || cfg.success;
+        const [fg, bg, bd, ico] = cfg[t.type] || cfg.success;
         return (
-          <div key={t.id} className="fade-in" style={{ background:T.card, border:`1px solid ${bd}`,
-              borderLeft:`3px solid ${col}`, borderRadius:7, padding:"10px 14px",
-              maxWidth:340, display:"flex", alignItems:"center", gap:10,
-              boxShadow:"0 3px 10px rgba(0,0,0,0.1)" }}>
-            <span style={{ fontSize:12, color:col, fontWeight:700, flexShrink:0 }}>{ico}</span>
-            <span style={{ fontSize:13, color:T.textMid }}>{t.msg}</span>
+          <div key={t.id} className="pop-in" style={{ background:T.card,
+              borderRadius:10, padding:"12px 16px", maxWidth:360,
+              display:"flex", alignItems:"center", gap:10,
+              boxShadow:"0 6px 20px rgba(14,21,38,0.12)",
+              border:`1.5px solid ${bd}`, borderLeft:`4px solid ${fg}` }}>
+            <span style={{ fontSize:12, color:fg, fontWeight:700, flexShrink:0,
+                width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center",
+                background:`${fg}18`, borderRadius:"50%", border:`1px solid ${fg}44` }}>{ico}</span>
+            <span style={{ fontSize:13, color:T.textMid, fontWeight:500, lineHeight:1.4 }}>{t.msg}</span>
           </div>
         );
       })}
@@ -2617,23 +2617,27 @@ function Toast({ toasts }) {
 
 function Steps({ steps, current }) {
   return (
-    <div style={{ display:"flex", alignItems:"center", marginBottom:20,
-        background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:"10px 16px" }}>
+    <div style={{ display:"flex", alignItems:"center", marginBottom:24, background:T.surface,
+        border:`1.5px solid ${T.border}`, borderRadius:12, padding:"12px 20px",
+        boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
       {steps.map((s, i) => (
         <div key={i} style={{ display:"flex", alignItems:"center", flex: i < steps.length-1 ? 1 : "none" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:7, flexShrink:0 }}>
-            <div style={{ width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center",
-                justifyContent:"center", fontSize:10, fontWeight:700, flexShrink:0, transition:"all 0.2s",
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+            <div style={{ width:24, height:24, borderRadius:"50%", display:"flex", alignItems:"center",
+                justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0, transition:"all 0.2s",
                 background: i < current ? T.green : i === current ? T.accent : T.borderLight,
                 color: i <= current ? "#fff" : T.textDim,
-                border: i > current ? `1px solid ${T.border}` : "none" }}>
+                border: i > current ? `1.5px solid ${T.border}` : "none",
+                boxShadow: i === current ? `0 0 0 4px ${T.accentGlow}` : "none" }}>
               {i < current ? "✓" : i+1}
             </div>
-            <span style={{ fontSize:12, fontWeight:i===current?600:400,
-              color:i===current?T.text:i<current?T.textMid:T.textDim, whiteSpace:"nowrap" }}>{s}</span>
+            <span style={{ fontSize:12.5, fontWeight:i===current?600:400,
+                color:i===current?T.accent:i<current?T.textMid:T.textDim, whiteSpace:"nowrap" }}>{s}</span>
           </div>
           {i < steps.length-1 && (
-            <div style={{ flex:1, height:2, background:i < current ? T.greenBright : T.borderLight, margin:"0 10px", borderRadius:1 }} />
+            <div style={{ flex:1, height:2, borderRadius:2,
+                background:i < current ? T.greenBright : T.borderLight,
+                margin:"0 12px", transition:"background 0.3s" }} />
           )}
         </div>
       ))}
@@ -2643,15 +2647,17 @@ function Steps({ steps, current }) {
 
 function StatCard({ icon, label, value, sub, color=T.accent }) {
   return (
-    <Card style={{ padding:"16px 18px", borderLeft:`3px solid ${color}` }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <span style={{ fontSize:11, fontWeight:600, color:T.textSub, textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</span>
-        <div style={{ width:30, height:30, borderRadius:7, background:color+"14",
-            border:`1px solid ${color}30`, display:"flex", alignItems:"center",
-            justifyContent:"center", fontSize:14, flexShrink:0 }}>{icon}</div>
+    <Card hover style={{ padding:"18px 20px", position:"relative", overflow:"hidden" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <span style={{ fontSize:11, fontWeight:700, color:T.textDim,
+            textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</span>
+        <div style={{ width:32, height:32, borderRadius:8,
+            background:`${color}14`, border:`1px solid ${color}28`,
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>{icon}</div>
       </div>
-      <div style={{ fontSize:26, fontWeight:700, color:T.text, letterSpacing:"-0.4px", lineHeight:1 }}>{value}</div>
-      {sub && <div style={{ fontSize:11, color:T.textDim, marginTop:5 }}>{sub}</div>}
+      <div style={{ fontSize:28, fontWeight:700, color:T.text, letterSpacing:"-0.6px", lineHeight:1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize:11.5, color:T.textDim, marginTop:5, fontWeight:400 }}>{sub}</div>}
+      <div style={{ position:"absolute", bottom:0, left:0, width:"40%", height:3, background:color, borderRadius:"0 3px 0 12px", opacity:0.7 }} />
     </Card>
   );
 }
@@ -2959,14 +2965,14 @@ function LoginScreen({ onLogin }) {
   // ── Password recovery screen (after clicking email reset link) ──
   if (recoveryToken) {
     return (
-      <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
+      <div style={{ minHeight:"100vh", background:`linear-gradient(150deg,#f0f3fd 0%,#f7f8fc 45%,#f0f4fd 100%)`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
         <div className="fade-in" style={{ width:440, position:"relative" }}>
           <div style={{ textAlign:"center", marginBottom:24 }}>
-            <div style={{ width:48, height:48, borderRadius:8, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, margin:"0 auto 14px" }}>🔑</div>
+            <div style={{ width:52, height:52, borderRadius:13, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, margin:"0 auto 16px", boxShadow:`0 6px 16px ${T.accentGlow}` }}>🔑</div>
             <h1 style={{ fontSize:21, fontWeight:700, color:T.text, marginBottom:4 }}>Set New Password</h1>
             <p style={{ color:T.textMid, fontSize:13 }}>Choose a strong new password for your account.</p>
           </div>
-          <Card style={{ padding:26, boxShadow:"0 4px 24px rgba(0,0,0,0.1), 0 1px 4px rgba(0,0,0,0.06)" }}>
+          <Card style={{ padding:28, boxShadow:"0 8px 32px rgba(41,82,227,0.1), 0 2px 8px rgba(0,0,0,0.06)", borderRadius:16 }}>
             {resetDone ? (
               <div style={{ textAlign:"center", padding:"10px 0" }}>
                 <div style={{ fontSize:48, marginBottom:12 }}>✅</div>
@@ -3001,7 +3007,7 @@ function LoginScreen({ onLogin }) {
   // ── Pending screen ───────────────────────────────────────────────
   if (pendingUser) {
     return (
-      <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
+      <div style={{ minHeight:"100vh", background:`linear-gradient(150deg,#f0f3fd 0%,#f7f8fc 45%,#f0f4fd 100%)`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
         <div className="fade-in" style={{ width:460, position:"relative", textAlign:"center" }}>
           <div style={{ width:72, height:72, borderRadius:"50%", background:T.amberDim, border:`2px solid ${T.amber}55`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, margin:"0 auto 20px" }}>⏳</div>
           <h2 style={{ fontSize:22, fontWeight:700, color:T.text, marginBottom:8 }}>Awaiting Approval</h2>
@@ -3033,14 +3039,14 @@ function LoginScreen({ onLogin }) {
   const BG = `radial-gradient(ellipse at 20% 50%, ${T.accentDim}55 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, ${T.purpleDim}44 0%, transparent 50%)`;
 
   return (
-    <div style={{ minHeight:"100vh", background:T.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
+    <div style={{ minHeight:"100vh", background:`linear-gradient(150deg,#f0f3fd 0%,#f7f8fc 45%,#f0f4fd 100%)`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.font }}>
       <div style={{ position:"absolute", inset:0, backgroundImage:BG, pointerEvents:"none" }} />
       <div className="fade-in" style={{ width:440, position:"relative" }}>
         {/* Logo */}
         {/* ── Brand Header ── */}
         <div style={{ textAlign:"center", marginBottom:24 }}>
           <div style={{ position:"relative", display:"inline-block", marginBottom:14 }}>
-            <div style={{ width:44, height:44, borderRadius:8, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <div style={{ width:48, height:48, borderRadius:12, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 6px 16px ${T.accentGlow}` }}>
                 <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="4" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
                   <rect x="10" y="17" width="4" height="13" rx="1" fill="white" fillOpacity="0.95"/>
@@ -3052,7 +3058,7 @@ function LoginScreen({ onLogin }) {
                 </svg>
               </div>
           </div>
-          <h1 style={{ fontSize:21, fontWeight:700, color:T.text, letterSpacing:"-0.3px", marginBottom:4 }}>Bank2Tally</h1>
+          <h1 style={{ fontSize:22, fontWeight:700, color:T.text, letterSpacing:"-0.5px", marginBottom:4 }}>Bank2Tally</h1>
           <p style={{ color:T.textSub, fontSize:13, marginBottom:16 }}>Professional Bank Statement Importer</p>
           <div style={{ background:T.accentDim, border:`1px solid #bfdbfe`, borderRadius:6, padding:"10px 12px", textAlign:"left" }}>
             <p style={{ fontSize:12, color:"#1e40af", lineHeight:1.6, fontStyle:"italic", marginBottom:3 }}>"{todayQuote.text}"</p>
@@ -3074,7 +3080,7 @@ function LoginScreen({ onLogin }) {
           </div>
         )}
 
-        <Card style={{ padding:26, boxShadow:"0 4px 24px rgba(0,0,0,0.1), 0 1px 4px rgba(0,0,0,0.06)" }}>
+        <Card style={{ padding:28, boxShadow:"0 8px 32px rgba(41,82,227,0.1), 0 2px 8px rgba(0,0,0,0.06)", borderRadius:16 }}>
           {err && (
             <div style={{ background:T.redDim, border:`1px solid ${T.red}44`, borderRadius:8, padding:"10px 14px", fontSize:12, color:T.red, marginBottom:16 }}>
               ✕ {err}
@@ -3182,7 +3188,7 @@ function LoginScreen({ onLogin }) {
                 { label:"Confirm Password *", val:regPass2, set:setRegPass2, ph:"••••••••", pre:"🔒" },
               ].map(f => (
                 <div key={f.label} style={{ marginBottom:12 }}>
-                  <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>{f.label}</label>
+                  <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>{f.label}</label>
                   <Input value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} prefix={f.pre} />
                 </div>
               ))}
@@ -3343,7 +3349,7 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
           <div>
-            <h2 style={{ fontSize:20, fontWeight:700, color:T.text, letterSpacing:"-0.3px" }}>Dashboard</h2>
+            <h2 style={{ fontSize:20, fontWeight:700, color:T.text, letterSpacing:"-0.4px" }}>Dashboard</h2>
             <p style={{ color:T.textSub, fontSize:13, marginTop:2 }}>Good day, <strong style={{color:T.text, fontWeight:600}}>{user?.name?.split(" ")[0]}</strong> 👋</p>
           </div>
         </div>
@@ -3363,7 +3369,7 @@ function DashboardScreen({ history, setScreen, user, tally }) {
       </div>
 
       {/* Daily Motivation */}
-      <div style={{ background:T.accentDim, border:`1px solid ${T.accentMid}`, borderRadius:8, padding:"11px 16px", marginBottom:20, display:"flex", alignItems:"center", gap:12 }}>
+      <div style={{ background:T.accentDim, border:`1.5px solid ${T.accentLight}`, borderRadius:10, padding:"12px 18px", marginBottom:22, display:"flex", alignItems:"center", gap:12 }}>
         <div style={{ width:3, alignSelf:"stretch", borderRadius:2, background:T.accent, flexShrink:0 }} />
         <div>
           <p style={{ fontSize:12, color:"#1e40af", lineHeight:1.6, fontStyle:"italic", marginBottom:2 }}>"{todayQuote.text}"</p>
@@ -3371,7 +3377,7 @@ function DashboardScreen({ history, setScreen, user, tally }) {
         </div>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:22 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:24 }}>
         <StatCard icon="📑" label="Total Transactions" value={totalRows.toLocaleString()} sub={`${history.length} imports`} color={T.accent} />
         <StatCard icon="📅" label="This Month" value={thisMonth.length} sub="imports" color={T.purple} />
         <StatCard icon="⚠️" label="Suspense Pending" value={totalSuspense} sub="need review" color={T.amber} />
@@ -3716,7 +3722,7 @@ function ColumnMapScreen({ headers, templateKey, onMapped, onBack }) {
     <div className="fade-in">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
         <div>
-          <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:4 }}>Map Columns</h2>
+          <h2 style={{ fontSize:20, fontWeight:700, color:T.text, letterSpacing:"-0.4px", marginBottom:4 }}>Map Columns</h2>
           <p style={{ color:T.textDim, fontSize:13 }}>Drag source columns onto the target fields. Required fields marked <span style={{color:T.red}}>*</span></p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
@@ -4268,7 +4274,7 @@ function PreviewScreen({ rows, setRows, filename, selectedCompanies, onBack, onI
 
   return (
     <div className="fade-in">
-      <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:4 }}>Preview & Export</h2>
+      <h2 style={{ fontSize:20, fontWeight:700, color:T.text, letterSpacing:"-0.4px", marginBottom:4 }}>Preview & Export</h2>
       <p style={{ color:T.textDim, fontSize:13, marginBottom:20 }}>Final review before pushing to Tally or exporting</p>
 
       {/* ── Audit Compliance Bento Grid ── */}
@@ -4547,7 +4553,7 @@ function HistoryScreen({ history, onReimport, onDeleteEntry, onClearAll, onBack 
     <div className="fade-in">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div>
-          <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:4 }}>Import History</h2>
+          <h2 style={{ fontSize:20, fontWeight:700, color:T.text, letterSpacing:"-0.4px", marginBottom:4 }}>Import History</h2>
           <p style={{ color:T.textDim, fontSize:13 }}>{history.length} import{history.length!==1?"s":""} · auto-deleted after 7 days</p>
         </div>
         <div style={{ display:"flex", gap:8 }}>
@@ -4827,29 +4833,29 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
   return (
     <div className="fade-in">
-      <h2 style={{ fontSize:19, fontWeight:700, color:T.text, letterSpacing:"-0.2px", marginBottom:18 }}>Settings</h2>
+      <h2 style={{ fontSize:20, fontWeight:700, color:T.text, letterSpacing:"-0.4px", marginBottom:20 }}>Settings</h2>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
         {/* Profile Card */}
         <Card style={{ gridColumn:"1 / -1" }}>
           {/* Profile header */}
-          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, padding:"14px 16px", borderRadius:10, background:T.accentDim, border:`1px solid ${T.accentMid}` }}>
-            <div style={{ width:46, height:46, borderRadius:9, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:19, fontWeight:700, color:"#fff", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:22, padding:"16px 20px", borderRadius:12, background:T.accentDim, border:`1.5px solid ${T.accentLight}` }}>
+            <div style={{ width:50, height:50, borderRadius:12, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, fontWeight:700, color:"#fff", flexShrink:0, boxShadow:`0 4px 12px ${T.accentGlow}` }}>
               {(profForm.name||user?.name||"?").slice(0,2).toUpperCase()}
             </div>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontWeight:700, fontSize:17, color:T.text, marginBottom:3 }}>{user?.name || "—"}</div>
+              <div style={{ fontWeight:700, fontSize:18, color:T.text, marginBottom:4, letterSpacing:"-0.3px" }}>{user?.name || "—"}</div>
               {/* Email — high contrast so it's always readable */}
-              <div style={{ fontSize:13, color:"#94a3b8", fontFamily:T.mono, marginBottom:5, display:"flex", alignItems:"center", gap:6 }}>
+              <div style={{ fontSize:13, color:T.textSub, fontFamily:T.mono, marginBottom:6, display:"flex", alignItems:"center", gap:6 }}>
                 <span style={{ fontSize:11, opacity:0.7 }}>✉</span>
-                <span style={{ color: user?.email ? "#cbd5e1" : "#64748b", fontStyle: user?.email ? "normal" : "italic" }}>
+                <span style={{ color: user?.email ? T.textMid : T.textDim, fontStyle: user?.email ? "normal" : "italic" }}>
                   {user?.email || "No email on file"}
                 </span>
               </div>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 <Pill color="blue" size="xs">{fromDbRole(user?.role)}</Pill>
                 <Pill color={user?.status==="approved"?"green":"amber"} size="xs">{user?.status||"pending"}</Pill>
-                {mobileVerified && <Pill color="green" size="xs">📱 Verified</Pill>}
-                {user?.company && <Pill color="gray" size="xs">🏢 {user.company}</Pill>}
+                {mobileVerified && <Pill color="green" size="xs" dot>Verified</Pill>}
+                {user?.company && <Pill color="gray" size="xs">{user.company}</Pill>}
               </div>
             </div>
             <Btn variant="danger" onClick={onLogout} icon="🚪" size="sm">Sign Out</Btn>
@@ -4860,24 +4866,24 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
             <div>
-              <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Full Name *</label>
+              <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>Full Name *</label>
               <Input value={profForm.name} onChange={e=>setProfForm(f=>({...f,name:e.target.value}))} placeholder="Your full name" prefix="👤" />
             </div>
             <div>
-              <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Company</label>
+              <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>Company</label>
               <Input value={profForm.company} onChange={e=>setProfForm(f=>({...f,company:e.target.value}))} placeholder="Your company name" prefix="🏢" />
             </div>
           </div>
 
           {/* Email — read-only, from auth */}
           <div style={{ marginBottom:14 }}>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>
+            <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>
               Email Address
               <span style={{ marginLeft:6, color:"#64748b", fontSize:11 }}>(managed by Supabase Auth · contact admin to change)</span>
             </label>
-            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:8, border:`1px solid ${T.accent}33`, background:`${T.accentDim}55`, fontSize:13 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:8, border:`1.5px solid ${T.accentLight}`, background:T.accentDim, fontSize:13 }}>
               <span style={{ fontSize:15 }}>✉</span>
-              <span style={{ flex:1, color: user?.email ? "#e2e8f0" : "#64748b", fontStyle: user?.email ? "normal" : "italic", fontFamily:T.mono, fontSize:12 }}>
+              <span style={{ flex:1, color: user?.email ? T.textMid : T.textDim, fontStyle: user?.email ? "normal" : "italic", fontFamily:T.mono, fontSize:12 }}>
                 {user?.email || "No email on file — ask admin to update your profile"}
               </span>
               {user?.email && <Pill color="green" size="xs">✓ Verified</Pill>}
@@ -4886,7 +4892,7 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
           {/* Mobile with OTP verification */}
           <div style={{ marginBottom:16 }}>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>
+            <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>
               Mobile Number
               {mobileVerified && <span style={{ marginLeft:8, color:T.green, fontSize:11 }}>✓ Verified</span>}
               {!mobileVerified && profForm.mobile && <span style={{ marginLeft:8, color:T.amber||"#f59e0b", fontSize:11 }}>⚠ Not verified</span>}
@@ -4968,12 +4974,12 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
 
           <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>Current Password</label>
+              <label style={{ fontSize:12.5, fontWeight:600, color:T.textMid, display:"block", marginBottom:6 }}>Current Password</label>
               <Input type="password" value={cpOld} placeholder="Enter current password" prefix="🔑"
                 onChange={e => { setCpOld(e.target.value); setCpErr(""); setCpOk(""); }} />
             </div>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>New Password</label>
+              <label style={{ fontSize:12.5, fontWeight:600, color:T.textMid, display:"block", marginBottom:6 }}>New Password</label>
               <Input type="password" value={cpNew1} placeholder="Minimum 8 characters" prefix="🔒"
                 onChange={e => { setCpNew1(e.target.value); setCpErr(""); setCpOk(""); }} />
               {cpNew1.length > 0 && (
@@ -4991,7 +4997,7 @@ function SettingsScreen({ user, onLogout, onUserUpdate, tally, tallyHost, setTal
               )}
             </div>
             <div>
-              <label style={{ fontSize:12, fontWeight:600, color:T.textMid, display:"block", marginBottom:5 }}>Confirm New Password</label>
+              <label style={{ fontSize:12.5, fontWeight:600, color:T.textMid, display:"block", marginBottom:6 }}>Confirm New Password</label>
               <Input type="password" value={cpNew2} placeholder="Re-enter new password" prefix="🔒"
                 onChange={e => { setCpNew2(e.target.value); setCpErr(""); setCpOk(""); }}
                 onKeyDown={e => e.key==="Enter" && handleChangePassword()} />
@@ -5478,7 +5484,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
       {tab==="users" && (
       <div>
       {/* Stats row */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:22 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:24 }}>
         {[
           ["Total Users",  users.length,                                        T.accent],
           ["Active",       users.filter(u=>u.status==="approved").length,        T.green],
@@ -5806,26 +5812,26 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
             <div style={{ background:T.redDim, border:`1px solid ${T.red}33`, borderRadius:8, padding:"9px 13px", fontSize:12, color:T.red }}>✕ {addErr}</div>
           )}
           <div>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Full Name *</label>
+            <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>Full Name *</label>
             <Input value={addForm.name} onChange={e=>setAddForm(f=>({...f,name:e.target.value}))} placeholder="e.g. Priya Sharma" prefix="👤" />
           </div>
           <div>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Email Address *</label>
+            <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>Email Address *</label>
             <Input value={addForm.email} onChange={e=>setAddForm(f=>({...f,email:e.target.value}))} placeholder="user@company.in" prefix="✉" />
           </div>
           <div>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Temporary Password * (min 8 chars)</label>
+            <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>Temporary Password * (min 8 chars)</label>
             <Input value={addForm.password} onChange={e=>setAddForm(f=>({...f,password:e.target.value}))} placeholder="••••••••" prefix="🔑" />
           </div>
           <div>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Role</label>
+            <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>Role</label>
             <select value={addForm.role} onChange={e=>setAddForm(f=>({...f,role:e.target.value}))}
               style={{ width:"100%", padding:"9px 12px", borderRadius:8, fontSize:13, border:`1px solid ${T.border}`, background:T.surface, color:T.text }}>
               {ROLES.map(r=><option key={r} value={r}>{ROLE_LABELS[r]||r}</option>)}
             </select>
           </div>
           <div>
-            <label style={{ fontSize:12, color:T.textMid, display:"block", marginBottom:5 }}>Company</label>
+            <label style={{ fontSize:12.5, color:T.textMid, fontWeight:600, display:"block", marginBottom:6 }}>Company</label>
             <Input value={addForm.company} onChange={e=>setAddForm(f=>({...f,company:e.target.value}))} placeholder="e.g. Acme Corp Pvt Ltd" prefix="🏢" />
           </div>
           <div style={{ display:"flex", gap:10, marginTop:4 }}>
@@ -6253,88 +6259,86 @@ function AppInner() {
       <style>{css}</style>
       <Toast toasts={toasts} />
 
-      <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:T.font, backgroundImage:"none" }}>
+      <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:T.font }}>
         {/* Sidebar */}
-        <div style={{ width:220, background:T.sidebar, display:"flex", flexDirection:"column",
+        <div style={{ width:224, background:T.sidebar, display:"flex", flexDirection:"column",
             flexShrink:0, position:"fixed", top:0, bottom:0, left:0, zIndex:100,
             borderRight:`1px solid ${T.sidebarBdr}` }}>
 
-          {/* ── Brand ── */}
-          <div style={{ padding:"18px 16px 14px", borderBottom:`1px solid ${T.sidebarBdr}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:8, background:T.accent,
-                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                <svg width="20" height="20" viewBox="0 0 38 38" fill="none">
-                  <rect x="4"  y="17" width="4" height="13" rx="1" fill="white"/>
-                  <rect x="10" y="17" width="4" height="13" rx="1" fill="white"/>
-                  <rect x="16" y="17" width="4" height="13" rx="1" fill="white"/>
-                  <rect x="22" y="17" width="4" height="13" rx="1" fill="white"/>
-                  <rect x="28" y="17" width="4" height="13" rx="1" fill="white"/>
-                  <rect x="2"  y="31" width="33" height="3"  rx="1.5" fill="white"/>
-                  <polygon points="19,4 2,15 36,15" fill="white"/>
+          {/* Brand */}
+          <div style={{ padding:"20px 18px 16px", borderBottom:`1px solid ${T.sidebarBdr}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:11 }}>
+              <div style={{ width:38, height:38, borderRadius:9, background:T.accent,
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                  boxShadow:`0 4px 12px rgba(41,82,227,0.45)` }}>
+                <svg width="20" height="20" viewBox="0 0 36 36" fill="none">
+                  <rect x="3"  y="16" width="4" height="14" rx="1.5" fill="white"/>
+                  <rect x="9"  y="19" width="4" height="11" rx="1.5" fill="white" opacity="0.85"/>
+                  <rect x="15" y="13" width="4" height="17" rx="1.5" fill="white"/>
+                  <rect x="21" y="21" width="4" height="9"  rx="1.5" fill="white" opacity="0.85"/>
+                  <rect x="27" y="16" width="4" height="14" rx="1.5" fill="white"/>
+                  <rect x="1"  y="31" width="34" height="2.5" rx="1.25" fill="white" opacity="0.9"/>
                 </svg>
               </div>
               <div>
-                <div style={{ fontWeight:700, fontSize:14, color:"#fff", letterSpacing:"-0.2px" }}>Bank2Tally</div>
-                <div style={{ fontSize:10, color:T.sidebarDim, marginTop:1 }}>by Verma Consultancy</div>
+                <div style={{ fontWeight:700, fontSize:14.5, color:"#f0f4ff", letterSpacing:"-0.2px", lineHeight:1.2 }}>Bank2Tally</div>
+                <div style={{ fontSize:10, color:T.sidebarDim, marginTop:2, letterSpacing:"0.02em" }}>by Verma Consultancy</div>
               </div>
             </div>
           </div>
 
-          {/* ── Nav ── */}
-          <nav style={{ flex:1, padding:"10px 10px", overflowY:"auto" }}>
+          {/* Nav */}
+          <nav style={{ flex:1, padding:"12px 10px", overflowY:"auto" }}>
 
-            {/* Group label: MAIN */}
-            <div style={{ fontSize:9.5, fontWeight:700, color:T.sidebarDim, letterSpacing:"0.1em",
-                textTransform:"uppercase", padding:"8px 10px 4px" }}>Menu</div>
+            <div style={{ fontSize:10, fontWeight:700, color:T.sidebarDim, letterSpacing:"0.1em",
+                textTransform:"uppercase", padding:"6px 10px 6px", marginBottom:2 }}>Menu</div>
 
             {NAV.filter(n=>n.group==="main").map(n => {
               const active = screen === n.id;
               return (
                 <button key={n.id} className="nav-item" onClick={() => setScreen(n.id)}
-                  style={{ width:"100%", display:"flex", alignItems:"center", padding:0,
-                    borderRadius:7, border:"none", marginBottom:2,
-                    background:"transparent", cursor:"pointer", fontFamily:T.font }}>
+                  style={{ width:"100%", display:"flex", padding:0, borderRadius:8,
+                    border:"none", marginBottom:2, background:"transparent",
+                    cursor:"pointer", fontFamily:T.font }}>
                   <div className="nav-inner" style={{ display:"flex", alignItems:"center", gap:9,
-                      flex:1, padding:"8px 10px", borderRadius:7,
+                      flex:1, padding:"9px 11px", borderRadius:8,
                       background: active ? T.sidebarActBg : "transparent",
                       borderLeft: active ? `3px solid ${T.accent}` : "3px solid transparent",
-                      transition:"background 0.12s, border-color 0.12s" }}>
-                    <span style={{ fontSize:15, lineHeight:1, color: active ? T.accent : T.sidebarText,
-                        flexShrink:0, width:18, textAlign:"center" }}>{n.icon}</span>
-                    <span style={{ fontSize:13, fontWeight: active ? 600 : 400,
-                        color: active ? "#fff" : T.sidebarText }}>{n.label}</span>
+                      transition:"background 0.12s" }}>
+                    <span style={{ fontSize:16, lineHeight:1, color: active ? "#8ba4f5" : T.sidebarText,
+                        flexShrink:0, width:20, textAlign:"center" }}>{n.icon}</span>
+                    <span style={{ fontSize:13, fontWeight: active ? 600 : 400, letterSpacing:"-0.01em",
+                        color: active ? "#e4ebff" : T.sidebarText }}>{n.label}</span>
                   </div>
                 </button>
               );
             })}
 
-            {/* Group label: CONFIG */}
             {NAV.filter(n=>n.group==="config").length > 0 && (
-              <div style={{ fontSize:9.5, fontWeight:700, color:T.sidebarDim, letterSpacing:"0.1em",
-                  textTransform:"uppercase", padding:"14px 10px 4px" }}>Manage</div>
+              <div style={{ fontSize:10, fontWeight:700, color:T.sidebarDim, letterSpacing:"0.1em",
+                  textTransform:"uppercase", padding:"16px 10px 6px", marginBottom:2 }}>Manage</div>
             )}
 
             {NAV.filter(n=>n.group==="config").map(n => {
               const active = screen === n.id;
               return (
                 <button key={n.id} className="nav-item" onClick={() => setScreen(n.id)}
-                  style={{ width:"100%", display:"flex", alignItems:"center", padding:0,
-                    borderRadius:7, border:"none", marginBottom:2,
-                    background:"transparent", cursor:"pointer", fontFamily:T.font }}>
+                  style={{ width:"100%", display:"flex", padding:0, borderRadius:8,
+                    border:"none", marginBottom:2, background:"transparent",
+                    cursor:"pointer", fontFamily:T.font }}>
                   <div className="nav-inner" style={{ display:"flex", alignItems:"center", gap:9,
-                      flex:1, padding:"8px 10px", borderRadius:7,
+                      flex:1, padding:"9px 11px", borderRadius:8,
                       background: active ? T.sidebarActBg : "transparent",
                       borderLeft: active ? `3px solid ${T.accent}` : "3px solid transparent",
-                      transition:"background 0.12s, border-color 0.12s" }}>
-                    <span style={{ fontSize:15, lineHeight:1, color: active ? T.accent : T.sidebarText,
-                        flexShrink:0, width:18, textAlign:"center" }}>{n.icon}</span>
-                    <span style={{ fontSize:13, fontWeight: active ? 600 : 400,
-                        color: active ? "#fff" : T.sidebarText }}>{n.label}</span>
+                      transition:"background 0.12s" }}>
+                    <span style={{ fontSize:16, lineHeight:1, color: active ? "#8ba4f5" : T.sidebarText,
+                        flexShrink:0, width:20, textAlign:"center" }}>{n.icon}</span>
+                    <span style={{ fontSize:13, fontWeight: active ? 600 : 400, letterSpacing:"-0.01em",
+                        color: active ? "#e4ebff" : T.sidebarText }}>{n.label}</span>
                     {n.badge && (
                       <span style={{ marginLeft:"auto", background:T.accent, color:"#fff",
-                          borderRadius:10, fontSize:10, fontWeight:700,
-                          padding:"1px 7px", minWidth:18, textAlign:"center" }}>
+                          borderRadius:6, fontSize:10.5, fontWeight:700,
+                          padding:"1px 7px", minWidth:20, textAlign:"center" }}>
                         {n.badge}
                       </span>
                     )}
@@ -6344,31 +6348,33 @@ function AppInner() {
             })}
           </nav>
 
-          {/* ── User strip ── */}
-          <div style={{ padding:"12px 10px", borderTop:`1px solid ${T.sidebarBdr}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:9, padding:"8px 10px",
-                borderRadius:8, background:"rgba(255,255,255,0.04)",
+          {/* User strip */}
+          <div style={{ padding:"12px 12px", borderTop:`1px solid ${T.sidebarBdr}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:9, padding:"9px 11px",
+                borderRadius:9, background:"rgba(255,255,255,0.05)",
                 border:`1px solid ${T.sidebarBdr}`, marginBottom:8 }}>
-              <div style={{ width:30, height:30, borderRadius:6, background:T.accent,
+              <div style={{ width:32, height:32, borderRadius:7, background:T.accent,
                   display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:12, fontWeight:700, color:"#fff", flexShrink:0 }}>{user.avatar}</div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:"#e2e8f0",
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name.split(" ")[0]}</div>
-                <div style={{ fontSize:10, color:T.sidebarDim }}>{fromDbRole(user.role)}</div>
+                <div style={{ fontSize:12.5, fontWeight:600, color:"#e4ebff",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    letterSpacing:"-0.01em" }}>{user.name.split(" ")[0]}</div>
+                <div style={{ fontSize:10.5, color:T.sidebarDim, marginTop:1 }}>{fromDbRole(user.role)}</div>
               </div>
             </div>
-            <button onClick={onLogout} style={{ width:"100%", padding:"7px", borderRadius:6,
-                fontSize:12, fontWeight:500, fontFamily:T.font, cursor:"pointer",
-                border:`1px solid rgba(239,68,68,0.3)`, background:"rgba(239,68,68,0.08)",
-                color:"#f87171", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <button onClick={onLogout} style={{ width:"100%", padding:"7px 12px", borderRadius:7,
+                fontSize:12.5, fontWeight:500, fontFamily:T.font, cursor:"pointer",
+                border:"1px solid rgba(239,68,68,0.25)", background:"rgba(239,68,68,0.07)",
+                color:"#f87171", display:"flex", alignItems:"center", justifyContent:"center",
+                gap:6, letterSpacing:"-0.01em", transition:"all 0.12s" }}>
               Sign Out
             </button>
           </div>
         </div>
 
         {/* Main */}
-        <div style={{ flex:1, marginLeft:220, padding:"24px 30px", maxWidth:1080, minWidth:0 }}>
+        <div style={{ flex:1, marginLeft:224, padding:"26px 32px", maxWidth:1100, minWidth:0 }}>
           {isImportScreen && <Steps steps={IMPORT_STEPS} current={screen} />}
 
           {screen === SCREENS.DASHBOARD && <DashboardScreen history={history} setScreen={setScreen} user={user} tally={tally} />}
