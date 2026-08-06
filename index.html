@@ -4,11 +4,43 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Bank2Tally - Professional Bank Statement Importer" />
-    <title>Bank2Tally</title>
+    <title>Bank2Tally – Convert Bank Statement to Tally (PDF/Excel/CSV Importer)</title>
+    <meta name="description" content="Bank2Tally converts bank statements (PDF, Excel, CSV) into Tally-ready vouchers in minutes. Supports HDFC, ICICI, SBI, Axis, Kotak & more. Auto ledger mapping, duplicate detection, Tally XML export." />
+    <meta name="keywords" content="bank statement to tally, bank2tally, import bank statement in tally prime, PDF to tally XML converter, bank statement excel to tally import, tally bank reconciliation" />
+    <link rel="canonical" href="https://bank2tally.ledgerio.in/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bank2Tally" />
+    <meta property="og:title" content="Bank2Tally – Convert Bank Statement to Tally in Minutes" />
+    <meta property="og:description" content="Upload your PDF, Excel or CSV bank statement and get Tally-ready vouchers with automatic ledger mapping, duplicate detection and Tally XML export." />
+    <meta property="og:url" content="https://bank2tally.ledgerio.in/" />
+    <meta property="og:image" content="https://bank2tally.ledgerio.in/og-image.png" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bank2Tally – Convert Bank Statement to Tally in Minutes" />
+    <meta name="twitter:description" content="Upload your PDF, Excel or CSV bank statement and get Tally-ready vouchers instantly. Supports 145+ Indian banks." />
+    <meta name="twitter:image" content="https://bank2tally.ledgerio.in/og-image.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Bank2Tally",
+      "url": "https://bank2tally.ledgerio.in/",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "description": "Bank2Tally converts bank statements (PDF, Excel, CSV) into Tally-ready vouchers with automatic ledger mapping, duplicate detection and Tally XML export.",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+      "publisher": { "@type": "Organization", "name": "Ledgerio", "url": "https://ledgerio.in" }
+    }
+    </script>
+
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body { background: #0f1117; color: #e2e8f0; font-family: 'DM Sans', 'Segoe UI', sans-serif; }
@@ -17,6 +49,22 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width:720px;margin:40px auto;padding:24px;font-family:sans-serif;line-height:1.6;">
+        <h1>Bank2Tally – Convert Bank Statement to Tally</h1>
+        <p>Bank2Tally converts bank statements in PDF, Excel or CSV format into Tally-ready vouchers.
+        It supports automatic ledger mapping, duplicate detection and direct Tally XML export for
+        HDFC, ICICI, SBI, Axis, Kotak and other Indian banks. Enable JavaScript to use the converter,
+        or read our guides:</p>
+        <ul>
+          <li><a href="/bank-statement-to-tally-converter/">Bank Statement to Tally Converter</a></li>
+          <li><a href="/import-bank-statement-in-tally-prime/">Import Bank Statement in Tally Prime</a></li>
+          <li><a href="/banks/hdfc/">HDFC Bank Statement to Tally</a></li>
+          <li><a href="/banks/icici/">ICICI Bank Statement to Tally</a></li>
+          <li><a href="/banks/sbi/">SBI Bank Statement to Tally</a></li>
+        </ul>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

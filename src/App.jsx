@@ -3219,6 +3219,15 @@ function LoginScreen({ onLogin }) {
             </a>
           </div>
           <p style={{ fontSize:11, color:T.textDim, marginTop:10 }}>v2.0 Commercial · Tally ERP 9 &amp; Prime Compatible</p>
+          <div style={{ display:"flex", justifyContent:"center", gap:10, flexWrap:"wrap", marginTop:12, fontSize:11 }}>
+            <a href="/bank-statement-to-tally-converter/" style={{ color:T.textDim }}>Converter Guide</a>
+            <a href="/import-bank-statement-in-tally-prime/" style={{ color:T.textDim }}>Import in Tally Prime</a>
+            <a href="/banks/hdfc/" style={{ color:T.textDim }}>HDFC</a>
+            <a href="/banks/icici/" style={{ color:T.textDim }}>ICICI</a>
+            <a href="/banks/sbi/" style={{ color:T.textDim }}>SBI</a>
+            <a href="/banks/axis/" style={{ color:T.textDim }}>Axis</a>
+            <a href="/banks/kotak/" style={{ color:T.textDim }}>Kotak</a>
+          </div>
         </div>
       </div>
     </div>
