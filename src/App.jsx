@@ -2849,9 +2849,10 @@ function LandingPage({ onGetStarted, onSignIn }) {
 
       {/* Bank-specific + guide links (SEO internal linking) */}
       <section style={{ maxWidth:880, margin:"0 auto", padding:"0 24px 64px" }}>
-        <h2 style={{ textAlign:"center", fontSize:22, fontWeight:800, marginBottom:20 }}>Bank-specific guides</h2>
+        <h2 style={{ textAlign:"center", fontSize:22, fontWeight:800, marginBottom:20 }}>Guides & resources</h2>
         <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:10 }}>
           {[
+            ["Features","/features/"],["About","/about/"],["Pricing","/pricing/"],["FAQ","/faq/"],
             ["HDFC Bank","/banks/hdfc/"],["ICICI Bank","/banks/icici/"],["SBI","/banks/sbi/"],
             ["Axis Bank","/banks/axis/"],["Kotak Mahindra","/banks/kotak/"],
             ["Full Converter Guide","/bank-statement-to-tally-converter/"],
@@ -2870,6 +2871,15 @@ function LandingPage({ onGetStarted, onSignIn }) {
       </section>
 
       <footer style={{ textAlign:"center", padding:"20px 24px", borderTop:`1px solid ${T.border}`, fontSize:11.5, color:T.textDim }}>
+        <div style={{ display:"flex", justifyContent:"center", gap:14, flexWrap:"wrap", marginBottom:10 }}>
+          <a href="/about/" style={{ color:T.textDim }}>About</a>
+          <a href="/features/" style={{ color:T.textDim }}>Features</a>
+          <a href="/pricing/" style={{ color:T.textDim }}>Pricing</a>
+          <a href="/faq/" style={{ color:T.textDim }}>FAQ</a>
+          <a href="/contact/" style={{ color:T.textDim }}>Contact</a>
+          <a href="/privacy-policy/" style={{ color:T.textDim }}>Privacy Policy</a>
+          <a href="/terms/" style={{ color:T.textDim }}>Terms</a>
+        </div>
         Produced by Verma Consultancy Services · +91 8707401846 · svtiger543939@gmail.com
       </footer>
     </div>
@@ -3332,6 +3342,10 @@ function LoginScreen({ onLogin, onBack }) {
           </div>
           <p style={{ fontSize:11, color:T.textDim, marginTop:10 }}>v2.0 Commercial · Tally ERP 9 &amp; Prime Compatible</p>
           <div style={{ display:"flex", justifyContent:"center", gap:10, flexWrap:"wrap", marginTop:12, fontSize:11 }}>
+            <a href="/about/" style={{ color:T.textDim }}>About</a>
+            <a href="/features/" style={{ color:T.textDim }}>Features</a>
+            <a href="/pricing/" style={{ color:T.textDim }}>Pricing</a>
+            <a href="/faq/" style={{ color:T.textDim }}>FAQ</a>
             <a href="/bank-statement-to-tally-converter/" style={{ color:T.textDim }}>Converter Guide</a>
             <a href="/import-bank-statement-in-tally-prime/" style={{ color:T.textDim }}>Import in Tally Prime</a>
             <a href="/banks/hdfc/" style={{ color:T.textDim }}>HDFC</a>
@@ -3339,6 +3353,9 @@ function LoginScreen({ onLogin, onBack }) {
             <a href="/banks/sbi/" style={{ color:T.textDim }}>SBI</a>
             <a href="/banks/axis/" style={{ color:T.textDim }}>Axis</a>
             <a href="/banks/kotak/" style={{ color:T.textDim }}>Kotak</a>
+            <a href="/contact/" style={{ color:T.textDim }}>Contact</a>
+            <a href="/privacy-policy/" style={{ color:T.textDim }}>Privacy</a>
+            <a href="/terms/" style={{ color:T.textDim }}>Terms</a>
           </div>
         </div>
       </div>
