@@ -2764,7 +2764,119 @@ function ExtensionStatus() {
   );
 }
 
-function LoginScreen({ onLogin }) {
+// ══════════════════════════════════════════════════════════════════
+// PUBLIC MARKETING HOMEPAGE (shown before login, crawlable content)
+// ══════════════════════════════════════════════════════════════════
+function LandingPage({ onGetStarted, onSignIn }) {
+  const FEATURES = [
+    { icon:"📄", title:"PDF, Excel & CSV", desc:"Upload bank statements in any format — including scanned PDFs via OCR." },
+    { icon:"🏦", title:"145+ Banks Supported", desc:"HDFC, ICICI, SBI, Axis, Kotak, PNB and other major Indian banks." },
+    { icon:"🔗", title:"Auto Ledger Mapping", desc:"Transactions are matched to existing Tally ledgers automatically." },
+    { icon:"🧾", title:"Duplicate Detection", desc:"Flags repeat entries before import so your books stay accurate." },
+    { icon:"⚡", title:"Tally XML Export", desc:"Download ready-to-import XML, or push straight into Tally Prime." },
+    { icon:"🔒", title:"Secure by Design", desc:"Your statements are processed per-session and never shared." },
+  ];
+  const STEPS = [
+    { n:"1", title:"Upload", desc:"Drop in your bank statement — PDF, Excel or CSV." },
+    { n:"2", title:"Map & Review", desc:"Confirm auto-mapped ledgers and columns." },
+    { n:"3", title:"Export to Tally", desc:"Download Tally XML or push directly into Tally Prime." },
+  ];
+  return (
+    <div style={{ background:T.bg, minHeight:"100vh", fontFamily:T.font, color:T.text }}>
+      {/* Nav */}
+      <header style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"18px 28px", borderBottom:`1px solid ${T.border}`, background:T.surface }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, fontWeight:800, fontSize:17 }}>
+          <span style={{ width:32, height:32, borderRadius:8, background:T.accent, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>₹</span>
+          Bank2Tally
+        </div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onSignIn} style={{ background:"transparent", color:T.accent, border:`1.5px solid ${T.accent}`, borderRadius:8, padding:"8px 16px", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+            Sign In
+          </button>
+          <button onClick={onGetStarted} style={{ background:T.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontWeight:700, fontSize:13.5, cursor:"pointer" }}>
+            Try Free
+          </button>
+        </div>
+      </header>
+
+      {/* Free banner */}
+      <div style={{ background:T.greenDim, color:T.greenText, textAlign:"center", padding:"9px 16px", fontSize:13, fontWeight:700, borderBottom:`1px solid ${T.greenMid}` }}>
+        🎉 Free to use for a limited time — no sign-up required, no card needed.
+      </div>
+
+      {/* Hero */}
+      <section style={{ maxWidth:880, margin:"0 auto", padding:"64px 24px 40px", textAlign:"center" }}>
+        <h1 style={{ fontSize:"clamp(28px,4.5vw,44px)", fontWeight:800, lineHeight:1.15, marginBottom:16 }}>
+          Convert Bank Statements to Tally in Minutes
+        </h1>
+        <p style={{ fontSize:16.5, color:T.textSub, maxWidth:620, margin:"0 auto 28px", lineHeight:1.6 }}>
+          Bank2Tally turns your PDF, Excel or CSV bank statement into Tally-ready vouchers —
+          with automatic ledger mapping, duplicate detection and Tally XML export. No manual data entry.
+        </p>
+        <button onClick={onGetStarted} style={{ background:T.accent, color:"#fff", border:"none", borderRadius:9, padding:"13px 28px", fontWeight:700, fontSize:15, cursor:"pointer", boxShadow:`0 6px 16px ${T.accentGlow}` }}>
+          Try It Free — No Sign-Up →
+        </button>
+        <p style={{ fontSize:12, color:T.textDim, marginTop:10 }}>Full converter access. History stays on this device.</p>
+      </section>
+
+      {/* Steps */}
+      <section style={{ maxWidth:880, margin:"0 auto", padding:"20px 24px 56px" }}>
+        <h2 style={{ textAlign:"center", fontSize:22, fontWeight:800, marginBottom:28 }}>How it works</h2>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:20 }}>
+          {STEPS.map(s => (
+            <div key={s.n} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, padding:20 }}>
+              <div style={{ width:34, height:34, borderRadius:"50%", background:T.accentDim, color:T.accent, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, marginBottom:10 }}>{s.n}</div>
+              <h3 style={{ fontSize:15.5, fontWeight:700, marginBottom:6 }}>{s.title}</h3>
+              <p style={{ fontSize:13.5, color:T.textSub, lineHeight:1.55 }}>{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features */}
+      <section style={{ maxWidth:1000, margin:"0 auto", padding:"0 24px 56px" }}>
+        <h2 style={{ textAlign:"center", fontSize:22, fontWeight:800, marginBottom:28 }}>Why accountants choose Bank2Tally</h2>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:18 }}>
+          {FEATURES.map(f => (
+            <div key={f.title} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, padding:20 }}>
+              <div style={{ fontSize:24, marginBottom:8 }}>{f.icon}</div>
+              <h3 style={{ fontSize:15, fontWeight:700, marginBottom:6 }}>{f.title}</h3>
+              <p style={{ fontSize:13.5, color:T.textSub, lineHeight:1.55 }}>{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Bank-specific + guide links (SEO internal linking) */}
+      <section style={{ maxWidth:880, margin:"0 auto", padding:"0 24px 64px" }}>
+        <h2 style={{ textAlign:"center", fontSize:22, fontWeight:800, marginBottom:20 }}>Bank-specific guides</h2>
+        <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:10 }}>
+          {[
+            ["HDFC Bank","/banks/hdfc/"],["ICICI Bank","/banks/icici/"],["SBI","/banks/sbi/"],
+            ["Axis Bank","/banks/axis/"],["Kotak Mahindra","/banks/kotak/"],
+            ["Full Converter Guide","/bank-statement-to-tally-converter/"],
+            ["Import in Tally Prime","/import-bank-statement-in-tally-prime/"],
+          ].map(([label,href]) => (
+            <a key={href} href={href} style={{ padding:"8px 16px", background:T.accentDim, color:T.accent, borderRadius:20, fontSize:13, fontWeight:600, textDecoration:"none", border:`1px solid ${T.accent}22` }}>{label}</a>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA footer */}
+      <section style={{ textAlign:"center", padding:"0 24px 64px" }}>
+        <button onClick={onGetStarted} style={{ background:T.accent, color:"#fff", border:"none", borderRadius:9, padding:"13px 28px", fontWeight:700, fontSize:15, cursor:"pointer" }}>
+          Convert Your First Statement →
+        </button>
+      </section>
+
+      <footer style={{ textAlign:"center", padding:"20px 24px", borderTop:`1px solid ${T.border}`, fontSize:11.5, color:T.textDim }}>
+        Produced by Verma Consultancy Services · +91 8707401846 · svtiger543939@gmail.com
+      </footer>
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin, onBack }) {
   const [tab, setTab] = useState("login"); // login | register | forgot
   // Login
   const [email, setEmail] = useState("");
@@ -5888,6 +6000,7 @@ class ErrorBoundary extends React.Component {
 
 function AppInner() {
   const [user, setUser] = useState(null);
+  const [showLogin, setShowLogin] = useState(() => typeof window !== "undefined" && window.location.hash === "#login");
   const [screen, setScreen] = useState(SCREENS.LOGIN);
   const [headers, setHeaders] = useState([]);
   const [rawRows, setRawRows] = useState([]);
@@ -5974,6 +6087,15 @@ function AppInner() {
         .then(rows => setPendingCount(rows.length))
         .catch(() => {});
     }
+  };
+
+  // Guest mode: skip login entirely, local-only session (no Supabase profile/session).
+  // History is stored under a stable per-browser guest id, same as any other user —
+  // it just won't sync across devices since there's no cloud account behind it.
+  const onGuestStart = () => {
+    let gid = localStorage.getItem("b2t_guest_id");
+    if (!gid) { gid = "guest_" + Math.random().toString(36).slice(2, 10); localStorage.setItem("b2t_guest_id", gid); }
+    onLogin({ id: gid, name: "Guest", role: "guest", status: "approved", email: "", company: "", mobile: "", mobile_verified: false, sessionToken: null, isGuest: true });
   };
 
   const onLogout = async () => {
@@ -6242,7 +6364,9 @@ function AppInner() {
   if (!user) return (
     <>
       <style>{css}</style>
-      <LoginScreen onLogin={onLogin} />
+      {showLogin
+        ? <LoginScreen onLogin={onLogin} onBack={() => setShowLogin(false)} />
+        : <LandingPage onGetStarted={onGuestStart} onSignIn={() => setShowLogin(true)} />}
     </>
   );
 
